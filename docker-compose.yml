@@ -1,0 +1,54 @@
+# Electro Store — hạ tầng (MySQL + Redis + Jaeger/Zipkin tracing).
+# Microservices Java chạy local qua START.ps1 (tiết kiệm RAM hơn bọc Docker).
+#
+# Khởi động:  docker compose up -d
+# Dừng:       docker compose down
+# Zipkin UI + collector: http://localhost:9411
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: electro-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_ROOT_HOST: "%"
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - electro_mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: electro-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - electro_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Distributed tracing — Micrometer OTEL gửi span tới đây; UI: Run Query trên trang chủ
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: electro-zipkin
+    restart: unless-stopped
+    ports:
+      - "9411:9411"
+
+volumes:
+  electro_mysql_data:
+  electro_redis_data:

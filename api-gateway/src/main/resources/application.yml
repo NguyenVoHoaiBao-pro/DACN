@@ -1,0 +1,198 @@
+server:
+  port: 8080
+
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    inetutils:
+      preferred-networks: 127.0.0.1
+      default-hostname: localhost
+      default-ip-address: 127.0.0.1
+    loadbalancer:
+      cache:
+        enabled: true
+        ttl: 5s
+        capacity: 256
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+      # Gộp header CORS trùng (Gateway + service con đều set) — tránh lỗi trình duyệt
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+      discovery:
+        locator:
+          enabled: true
+      routes:
+        # WebFlux springdoc serves UI at /swagger-ui.html (not /swagger-ui/index.html like MVC services)
+        - id: block-internal-apis
+          uri: no://op
+          order: -200
+          predicates:
+            - Path=/api/internal/**
+          filters:
+            - SetStatus=403
+
+        - id: swagger-ui-legacy-redirect
+          uri: no://op
+          order: -100
+          predicates:
+            - Path=/swagger-ui/index.html, /swagger-ui/
+          filters:
+            - RedirectTo=302, /swagger-ui.html
+
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**, /api/wishlist/**, /api/addresses/**, /api/admin/users/**
+
+        - id: cart-service
+          uri: lb://cart-service
+          predicates:
+            - Path=/api/carts/**, /api/cart/**
+
+        - id: catalog-service
+          uri: lb://catalog-service
+          predicates:
+            - Path=/api/products/**, /api/categories/**, /api/producers/**, /api/admin/products/**, /api/admin/inventory/**, /api/admin/suppliers/**, /api/admin/purchase-orders/**, /api/admin/categories/**, /api/admin/producers/**, /api/admin/attributes/**, /api/admin/attribute-values/**, /api/admin/banners/**, /api/admin/posts/**, /img/**
+
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**, /api/admin/orders/**, /api/admin/warranty/**, /api/public/warranty/**, /api/payments/**, /api/payment/**, /api/ghn/**, /api/shipping/**, /api/coupons/**, /api/admin/coupons/**
+
+        - id: review-service
+          uri: lb://review-service
+          predicates:
+            - Path=/api/reviews/**, /api/admin/reviews/**
+
+        - id: statistics-service
+          uri: lb://statistics-service
+          predicates:
+            - Path=/api/interactions/**, /api/admin/statistics/**, /api/recommendations/**
+
+        # OpenAPI docs from microservices (Swagger UI on gateway)
+        - id: openapi-auth
+          uri: lb://auth-service
+          predicates:
+            - Path=/v3/api-docs/auth-service
+          filters:
+            - RewritePath=/v3/api-docs/auth-service, /v3/api-docs
+
+        - id: openapi-catalog
+          uri: lb://catalog-service
+          predicates:
+            - Path=/v3/api-docs/catalog-service
+          filters:
+            - RewritePath=/v3/api-docs/catalog-service, /v3/api-docs
+
+        - id: openapi-user
+          uri: lb://user-service
+          predicates:
+            - Path=/v3/api-docs/user-service
+          filters:
+            - RewritePath=/v3/api-docs/user-service, /v3/api-docs
+
+        - id: openapi-cart
+          uri: lb://cart-service
+          predicates:
+            - Path=/v3/api-docs/cart-service
+          filters:
+            - RewritePath=/v3/api-docs/cart-service, /v3/api-docs
+
+        - id: openapi-order
+          uri: lb://order-service
+          predicates:
+            - Path=/v3/api-docs/order-service
+          filters:
+            - RewritePath=/v3/api-docs/order-service, /v3/api-docs
+
+        - id: openapi-review
+          uri: lb://review-service
+          predicates:
+            - Path=/v3/api-docs/review-service
+          filters:
+            - RewritePath=/v3/api-docs/review-service, /v3/api-docs
+
+        - id: openapi-statistics
+          uri: lb://statistics-service
+          predicates:
+            - Path=/v3/api-docs/statistics-service
+          filters:
+            - RewritePath=/v3/api-docs/statistics-service, /v3/api-docs
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: auth-service
+        url: /v3/api-docs/auth-service
+      - name: catalog-service
+        url: /v3/api-docs/catalog-service
+      - name: user-service
+        url: /v3/api-docs/user-service
+      - name: cart-service
+        url: /v3/api-docs/cart-service
+      - name: order-service
+        url: /v3/api-docs/order-service
+      - name: review-service
+        url: /v3/api-docs/review-service
+      - name: statistics-service
+        url: /v3/api-docs/statistics-service
+    use-root-path: false
+  api-docs:
+    enabled: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    ip-address: 127.0.0.1
+    hostname: localhost
+    instance-id: ${spring.application.name}:${server.port}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: w3c,b3
+    logging:
+      enabled: true
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN} %logger{36} : %m%n"

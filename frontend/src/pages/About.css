@@ -1,0 +1,309 @@
+.about-page-light {
+  background-color: #f8f9fa;
+  color: #333333;
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+/* Hero Section */
+.about-hero {
+  position: relative;
+  text-align: center;
+  padding: 120px 20px;
+  background: 
+    linear-gradient(to right, rgba(25, 12, 0, 0.9) 0%, rgba(45, 20, 0, 0.8) 50%, rgba(25, 12, 0, 0.9) 100%),
+    url('https://intphcm.com/data/upload/banner-la-gi.jpg');
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255, 122, 0, 0.4);
+  margin: 20px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Corner HUD accents for the hero frame */
+.about-hero::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: -1px;
+  width: 30px; height: 30px;
+  border-top: 3px solid #FF7A00;
+  border-left: 3px solid #FF7A00;
+  border-top-left-radius: 8px;
+  z-index: 2;
+}
+
+.about-hero::after {
+  content: "";
+  position: absolute;
+  bottom: -1px; right: -1px;
+  width: 30px; height: 30px;
+  border-bottom: 3px solid #FF7A00;
+  border-right: 3px solid #FF7A00;
+  border-bottom-right-radius: 8px;
+  z-index: 2;
+}
+
+/* Grid Overlay */
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 122, 0, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 122, 0, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 3;
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 50px 40px;
+  background-color: rgba(35, 15, 0, 0.85); /* Solid dark brown */
+  border-radius: 16px;
+  border: 1px solid rgba(255, 122, 0, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.hero-badge {
+  display: block;
+  width: 80%;
+  margin: 0 auto 30px auto;
+  padding: 10px 24px;
+  background-color: rgba(180, 70, 0, 0.6);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 122, 0, 0.5);
+  border-radius: 30px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.about-hero h1 {
+  font-size: 46px;
+  font-weight: 800;
+  margin-bottom: 20px;
+  color: #ffffff;
+}
+
+.highlight-text {
+  color: #FF7A00;
+}
+
+.about-hero p {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.88);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* Container */
+.about-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 60px 20px;
+}
+
+/* Vision & Mission Cards */
+.vision-mission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  margin-bottom: 80px;
+}
+
+.vm-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 40px;
+  border: 1px solid #eeeeee;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.vm-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+  border-color: #FF7A00;
+}
+
+.icon-wrapper {
+  width: 60px;
+  height: 60px;
+  background-color: rgba(255, 122, 0, 0.1);
+  color: #FF7A00;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.vm-card h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #222222;
+}
+
+.vm-card p {
+  color: #555555;
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+/* Reasons Section */
+.section-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.section-header h2 {
+  font-size: 32px;
+  font-weight: 800;
+  margin-bottom: 16px;
+  color: #222222;
+}
+
+.section-header p {
+  color: #666666;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.reasons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 80px;
+}
+
+.reason-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 30px 20px;
+  text-align: center;
+  border: 1px solid #eeeeee;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: transform 0.3s ease;
+}
+
+.reason-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(255, 122, 0, 0.08);
+  border-color: #FF7A00;
+}
+
+.reason-card .icon-wrapper {
+  margin: 0 auto 20px auto;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 2px solid #FF7A00;
+  color: #FF7A00;
+}
+
+.reason-card h3 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.reason-card p {
+  color: #666666;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Team Section */
+.team-subtitle {
+  font-size: 12px;
+  color: #FF7A00;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 40px;
+}
+
+.team-member {
+  text-align: center;
+}
+
+.member-image {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  margin: 0 auto 20px auto;
+  overflow: hidden;
+  border: 3px solid #eeeeee;
+  transition: border-color 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.member-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-member:hover .member-image {
+  border-color: #FF7A00;
+}
+
+.team-member h3 {
+  font-size: 20px;
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.member-role {
+  color: #FF7A00;
+  font-size: 14px;
+  margin-bottom: 12px;
+  display: block;
+  font-weight: 600;
+}
+
+.member-desc {
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .about-hero {
+    padding: 72px 16px 80px;
+  }
+
+  .hero-frame {
+    inset: 16px 14px;
+    border-radius: 14px;
+  }
+
+  .hero-content {
+    padding: 32px 20px 36px;
+    border-radius: 14px;
+  }
+
+  .about-hero h1 {
+    font-size: 32px;
+  }
+  .vision-mission-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: user-service
+  config:
+    import: "optional:configserver:http://localhost:8888"
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+        alphanumeric-ids:
+          enabled: true
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:mysql-11ae5c82-cjcakvalvajvjallh.i.aivencloud.com}:${MYSQL_PORT:28570}/electro_user_db?useSSL=${MYSQL_USE_SSL:true}&requireSSL=${MYSQL_REQUIRE_SSL:true}&sslMode=${MYSQL_SSL_MODE:REQUIRED}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+    username: ${MYSQL_USER:avnadmin}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8083
+
+# OAuth (chi can khi dung Google/Facebook login; dat gia tri that trong .env neu can)
+google:
+  client:
+    id: ${GOOGLE_CLIENT_ID:local-dev-placeholder}
+
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  expiration: 86400000
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 3
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 8s

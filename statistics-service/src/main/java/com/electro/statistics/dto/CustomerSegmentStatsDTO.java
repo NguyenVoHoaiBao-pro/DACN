@@ -1,0 +1,29 @@
+package com.electro.statistics.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CustomerSegmentStatsDTO {
+    private List<SegmentBreakdown> segments;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SegmentBreakdown {
+        private Integer productTypeId;
+        private String categoryName;
+        private String segmentLabel;
+        private Long userCount;
+        private Double percentage;
+        private String color;
+    }
+}

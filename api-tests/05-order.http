@@ -1,0 +1,10 @@
+# Order
+@order = {{order}}
+@token = {{token}}
+
+### Mã giảm giá (public)
+GET {{order}}/api/coupons
+
+### Đơn hàng của tôi (JWT + quyền USER_ORDER_HISTORY)
+GET {{order}}/api/orders?page=0&size=5
+Authorization: Bearer {{token}}

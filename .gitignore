@@ -1,0 +1,16 @@
+# Git / IDE
+.idea/
+.run/
+*.log
+
+# Maven
+**/target/
+.maven-repository/
+
+# Docker data (named volumes are external; this is for local overrides)
+.env
+api-tests/http-client.private.env.json
+
+# OS
+Thumbs.db
+Desktop.ini

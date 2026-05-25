@@ -1,0 +1,10 @@
+.scroll-to-top-fab.MuiFab-root {
+  position: fixed !important;
+}
+
+@media (max-width: 480px) {
+  .scroll-to-top-fab.MuiFab-root {
+    bottom: 88px !important;
+    right: 16px !important;
+  }
+}

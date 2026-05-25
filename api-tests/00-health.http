@@ -1,0 +1,14 @@
+# Health & OpenAPI — chọn environment: local-direct | local-gateway
+@gateway = {{gateway}}
+
+### Gateway Swagger (WebFlux)
+GET {{gateway}}/swagger-ui.html
+
+### Gateway — OpenAPI catalog qua Eureka
+GET {{gateway}}/v3/api-docs/catalog-service
+
+### Catalog — trực tiếp (local-direct: catalog = :8082)
+GET {{catalog}}/v3/api-docs
+
+### Auth — trực tiếp
+GET {{auth}}/v3/api-docs

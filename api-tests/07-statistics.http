@@ -1,0 +1,15 @@
+# Statistics
+@statistics = {{statistics}}
+
+### Track VIEW (buffer Redis hoặc fallback MySQL)
+POST {{statistics}}/api/interactions/track
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "productId": 1,
+  "actionType": "VIEW"
+}
+
+### Gợi ý sản phẩm
+GET {{statistics}}/api/recommendations?userId=1&limit=5

@@ -1,0 +1,43 @@
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: fit-content;
+  flex-shrink: 0;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.logo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-text {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ff7a00;
+  font-family: "Arial", sans-serif;
+}
+
+.logo-link:hover .logo-text {
+  color: #e56a00;
+}
+
+.logo-link:hover .logo-icon svg rect {
+  fill: #e56a00;
+}
+
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 24px;
+  }
+}

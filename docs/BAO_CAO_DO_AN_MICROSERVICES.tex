@@ -1,0 +1,521 @@
+% ============================================================
+%  BÁO CÁO ĐỒ ÁN — HỆ THỐNG ELECTRO STORE MICROSERVICES
+%
+%  OVERLEAF: Menu trái → Settings → Compiler → pdfLaTeX (mặc định OK)
+%  Hoặc: XeLaTeX nếu bạn bật lại block fontspec bên dưới.
+% ============================================================
+\documentclass[aspectratio=169,12pt]{beamer}
+
+% --- Theme ---
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+% --- Tiếng Việt (pdfLaTeX — tương thích Overleaf mặc định) ---
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!50!black}
+}
+
+% --- Thông tin sinh viên (SỬA LẠI) ---
+\title[Hệ thống Microservices]{XÂY DỰNG HỆ THỐNG\\THƯƠNG MẠI ĐIỆN TỬ ELECTRO STORE\\THEO KIẾN TRÚC MICROSERVICES}
+\subtitle{Báo cáo đồ án tốt nghiệp}
+\author{Nguyễn Hoàng Khang — MSSV: 22130029}
+\institute{Trường Đại học ... — Khoa Công nghệ Thông tin}
+\date{\today}
+
+\begin{document}
+
+% --- Trang tiêu đề ---
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% --- Mục lục tổng ---
+\begin{frame}{Mục lục}
+  \tableofcontents
+\end{frame}
+
+% ============================================================
+% PHẦN 1: MỞ ĐẦU & ĐẶT VẤN ĐỀ (2–3 phút)
+% ============================================================
+\begin{frame}{Phần 1 — Mở đầu \& Đặt vấn đề}
+  \begin{itemize}
+    \item 1.1 Giới thiệu đề tài
+    \item 1.2 Hạn chế Monolith
+    \item 1.3 Lý do chọn Microservices
+  \end{itemize}
+\end{frame}
+
+\section{Mở đầu}
+
+\begin{frame}{1.1. Giới thiệu đề tài}
+  \textbf{Tên đề tài:} Xây dựng hệ thống thương mại điện tử \textbf{Electro Store} theo kiến trúc Microservices.
+
+  \vspace{0.6em}
+  \textbf{Phạm vi hệ thống:}
+  \begin{itemize}
+    \item Cửa hàng điện tử: xem sản phẩm, giỏ hàng, đặt hàng, thanh toán, đánh giá.
+    \item Quản trị: thống kê doanh thu, duyệt review, quản lý kho (RBAC).
+    \item Hạ tầng: API Gateway, Service Discovery, Config Server, MySQL Cloud, Redis Cloud.
+  \end{itemize}
+
+  \vspace{0.4em}
+  \textbf{Mục tiêu:} Chuyển đổi từ mô hình monolith (một ứng dụng — một database) sang kiến trúc phân tán, độc lập theo từng domain nghiệp vụ.
+\end{frame}
+
+\begin{frame}{1.2. Hạn chế của Monolith}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+    \textbf{Kiến trúc truyền thống:}
+    \begin{itemize}
+      \item Một codebase, một DB \texttt{electro\_store\_db}.
+      \item JOIN trực tiếp giữa Order, User, Product.
+      \item Deploy ``all-or-nothing''.
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Hạn chế thực tế:}
+    \begin{itemize}
+      \item \textbf{Nghẽn cổ chai:} traffic cao ở catalog/review làm chậm checkout.
+      \item \textbf{Khó scale:} không scale riêng module Order.
+      \item \textbf{Coupling cao:} sửa schema User có thể vỡ Order.
+      \item \textbf{Single point of failure:} lỗi một module ảnh hưởng toàn hệ thống.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{1.2. Lý do chọn Microservices}
+  \begin{block}{Ba động lực chính}
+    \begin{enumerate}
+      \item \textbf{Scale độc lập:} Order, Catalog, Statistics scale theo tải riêng.
+      \item \textbf{Bounded Context rõ ràng:} mỗi service một trách nhiệm (Auth, Cart, Order...).
+      \item \textbf{Khả năng chịu lỗi:} service phụ trợ lỗi không nhất thiết làm sập luồng mua hàng chính.
+    \end{enumerate}
+  \end{block}
+
+  \vspace{0.5em}
+  \textbf{Lựa chọn của đồ án:} Spring Cloud (Gateway + Eureka + OpenFeign), Database per Service trên Aiven MySQL, Redis Cloud cho session/token và analytics buffer.
+\end{frame}
+
+% ============================================================
+% PHẦN 2: KIẾN TRÚC & PHÂN RÃ (3–4 phút)
+% ============================================================
+\begin{frame}{Phần 2 — Kiến trúc hệ thống \& Phân rã dịch vụ}
+  \begin{itemize}
+    \item 2.1 Phân rã nghiệp vụ (Bounded Contexts)
+    \item 2.2 Sơ đồ kiến trúc, Gateway, Database per Service
+    \item 2.3 Giao tiếp liên service (Feign / Redis)
+  \end{itemize}
+\end{frame}
+
+\section{Kiến trúc}
+
+\begin{frame}{2.1. Phân rã nghiệp vụ (Bounded Contexts)}
+  \small
+  \begin{table}
+    \centering
+    \begin{tabular}{@{}lll@{}}
+      \toprule
+      \textbf{Bounded Context} & \textbf{Service} & \textbf{Port} \\
+      \midrule
+      Identity \& Access       & auth-service       & 8081 \\
+      Customer Management      & user-service       & 8083 \\
+      Product Catalog          & catalog-service    & 8082 \\
+      Shopping Cart            & cart-service       & 8084 \\
+      Order Management         & order-service      & 8086 \\
+      Review Management        & review-service     & 8087 \\
+      Analytics \& Recommend   & statistics-service & 8088 \\
+      \midrule
+      \multicolumn{3}{l}{\textit{Hạ tầng: discovery-server :8761, config-server :8888, api-gateway :8080}} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+  \textbf{Nguyên tắc:} Mỗi context sở hữu database riêng; giao tiếp liên service qua API, không truy cập chéo DB.
+\end{frame}
+
+\begin{frame}{2.2. Sơ đồ kiến trúc tổng thể}
+  \centering
+  \resizebox{0.95\textwidth}{!}{%
+  \begin{tikzpicture}[
+    node distance=0.55cm and 0.9cm,
+    svc/.style={draw, rounded corners, minimum width=2.1cm, minimum height=0.65cm, align=center, font=\scriptsize},
+    infra/.style={draw, dashed, rounded corners, fill=blue!6, minimum width=2.3cm, minimum height=0.65cm, align=center, font=\scriptsize},
+    data/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum height=0.7cm, minimum width=1.6cm, align=center, font=\scriptsize},
+    arr/.style={-{Stealth[length=2mm]}, thick}
+  ]
+    \node[font=\small\bfseries] (client) {Client / Postman};
+    \node[infra, below=of client] (gw) {API Gateway\\:8080};
+    \node[infra, left=1.2cm of gw] (eu) {Eureka\\:8761};
+    \node[infra, right=1.2cm of gw] (cfg) {Config\\:8888};
+
+    \node[svc, below left=1.1cm and -0.2cm of gw] (auth) {auth};
+    \node[svc, below=1.1cm of gw] (user) {user};
+    \node[svc, below right=1.1cm and -0.2cm of gw] (cat) {catalog};
+    \node[svc, below left=1.0cm and 0.3cm of user] (cart) {cart};
+    \node[svc, below=1.0cm of user] (ord) {order};
+    \node[svc, below right=1.0cm and 0.3cm of user] (rev) {review};
+    \node[svc, below=1.0cm of ord] (stat) {statistics};
+
+    \node[data, below=1.0cm of cat] (mysql) {Aiven MySQL\\6 DB};
+    \node[data, right=0.6cm of mysql] (redis) {Redis Cloud};
+
+    \draw[arr] (client) -- (gw);
+    \draw[arr] (gw) -- (auth); \draw[arr] (gw) -- (user);
+    \draw[arr] (gw) -- (cat); \draw[arr] (gw) -- (cart);
+    \draw[arr] (gw) -- (ord); \draw[arr] (gw) -- (rev);
+    \draw[arr] (gw) -- (stat);
+    \draw[dashed, gray] (auth) -- (eu);
+    \draw[dashed, gray] (ord) -- (eu);
+    \draw[dashed, -{Stealth}] (ord) -- node[font=\tiny, above]{Feign} (cart);
+    \draw[dashed, -{Stealth}] (stat) -- node[font=\tiny, above]{Feign} (ord);
+    \draw[arr] (auth) -- (redis);
+    \draw[arr] (stat) -- (redis);
+    \draw[arr] (user) -- (mysql);
+    \draw[arr] (ord) -- (mysql);
+  \end{tikzpicture}%
+  }
+\end{frame}
+
+\begin{frame}{2.2. API Gateway — Routing \& Bảo mật}
+  \textbf{Vai trò:} Điểm vào duy nhất (\texttt{http://localhost:8080}).
+
+  \vspace{0.4em}
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \textbf{Định tuyến (ví dụ):}
+    \begin{itemize}\small
+      \item \texttt{/api/auth/**} $\rightarrow$ auth-service
+      \item \texttt{/api/products/**} $\rightarrow$ catalog-service
+      \item \texttt{/api/cart/**} $\rightarrow$ cart-service
+      \item \texttt{/api/orders/**} $\rightarrow$ order-service
+      \item \texttt{/api/admin/statistics/**} $\rightarrow$ statistics-service
+    \end{itemize}
+
+    \column{0.5\textwidth}
+    \textbf{JWT Filter:}
+    \begin{itemize}\small
+      \item \textbf{Public:} login, products, reviews, recommendations
+      \item \textbf{Protected:} cart, orders, users, admin
+      \item \textbf{Blocked:} \texttt{/api/internal/**} $\rightarrow$ 403
+    \end{itemize}
+  \end{columns}
+
+  \vspace{0.5em}
+  \texttt{lb://service-name} qua Eureka — không hardcode IP từng instance.
+\end{frame}
+
+\begin{frame}{2.2. Database per Service}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{@{}ll@{}}
+      \toprule
+      \textbf{Service} & \textbf{Database (Aiven MySQL)} \\
+      \midrule
+      user-service       & \texttt{electro\_user\_db} \\
+      catalog-service  & \texttt{electro\_catalog\_db} \\
+      cart-service     & \texttt{electro\_cart\_db} \\
+      order-service    & \texttt{electro\_order\_db} \\
+      review-service   & \texttt{electro\_review\_db} \\
+      statistics-service & \texttt{electro\_statistics\_db} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \textbf{auth-service:} không có DB riêng — xác thực qua Feign user-service; refresh token lưu Redis.
+
+  \vspace{0.3em}
+  \begin{block}{Minh chứng}
+    Mỗi \texttt{application.yml} chỉ khai báo \textbf{một} JDBC URL; liên service dùng \textbf{OpenFeign}, không cross-query.
+  \end{block}
+\end{frame}
+
+\begin{frame}{2.2. Giao tiếp liên service}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+    \textbf{Đồng bộ — HTTP/REST + OpenFeign}
+    \begin{itemize}\small
+      \item order $\rightarrow$ cart (lấy giỏ checkout)
+      \item order $\rightarrow$ user (địa chỉ)
+      \item order $\rightarrow$ catalog (tồn kho, giá)
+      \item review $\rightarrow$ order (xác minh mua hàng)
+      \item statistics $\rightarrow$ order (KPI admin)
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Bán bất đồng bộ}
+    \begin{itemize}\small
+      \item Redis queue: VIEW analytics (statistics)
+      \item Sync batch MySQL mỗi $\sim$60 giây
+      \item AI recommendation: HTTP tới Python :5000 (optional)
+    \end{itemize}
+  \end{columns}
+
+  \vspace{0.5em}
+  \textit{Ghi chú trình bày:} Đồ án ưu tiên giao tiếp đồng bộ Feign; Kafka/Event-driven là hướng mở rộng (tham khảo dự án TLTN).
+\end{frame}
+
+% ============================================================
+% PHẦN 3: TRIỂN KHAI KỸ THUẬT (2–3 phút)
+% ============================================================
+\begin{frame}{Phần 3 — Triển khai kỹ thuật \& Công nghệ}
+  \begin{itemize}
+    \item 3.1 Tech Stack từng tầng
+    \item 3.2 Hạ tầng, Eureka, Config, giám sát
+  \end{itemize}
+\end{frame}
+
+\section{Công nghệ}
+
+\begin{frame}{3.1. Tech Stack}
+  \begin{table}
+    \centering
+    \begin{tabular}{@{}ll@{}}
+      \toprule
+      \textbf{Tầng} & \textbf{Công nghệ} \\
+      \midrule
+      Backend microservices & Java 17+, Spring Boot 3, Spring Cloud Gateway \\
+      Service Discovery     & Netflix Eureka \\
+      Cấu hình tập trung    & Spring Cloud Config Server \\
+      Giao tiếp nội bộ      & OpenFeign (HTTP/REST) \\
+      Bảo mật               & JWT (HS256), Spring Security, RBAC \\
+      Database              & MySQL (Aiven Cloud) — Database per Service \\
+      Cache / Session       & Redis Cloud (refresh token, analytics buffer) \\
+      Module dùng chung     & \texttt{shared} (JwtTokenProvider, ApiResponse) \\
+      Kiểm thử API          & Postman Collections + PowerShell smoke scripts \\
+      AI gợi ý (tùy chọn)   & Python FastAPI/Flask :5000 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+\begin{frame}{3.2. Hạ tầng \& Quan sát hệ thống}
+  \textbf{Service Discovery \& Configuration}
+  \begin{itemize}
+    \item Eureka UI: \texttt{http://localhost:8761} — danh sách instance đăng ký.
+    \item Config Server :8888 — cấu hình tập trung (\texttt{config-repo/}).
+    \item Biến môi trường \texttt{.env}: MYSQL\_*, REDIS\_URL, JWT\_SECRET.
+  \end{itemize}
+
+  \vspace{0.5em}
+  \textbf{Giám sát trong phạm vi đồ án}
+  \begin{itemize}
+    \item \texttt{check-all-services.ps1} — health 10/10 services.
+    \item Log từng service: \texttt{.run/<service-name>.log}.
+    \item Actuator: \texttt{/actuator/health} trên từng service.
+    \item Swagger tập trung qua Gateway: \texttt{/swagger-ui.html}.
+  \end{itemize}
+
+  \vspace{0.3em}
+  \textit{Hướng phát triển:} Zipkin/Jaeger (distributed tracing), ELK, Prometheus + Grafana.
+\end{frame}
+
+% ============================================================
+% PHẦN 4: DEMO (7–8 phút)
+% ============================================================
+\begin{frame}{Phần 4 — Demo thực tế \& Chứng minh kiến trúc}
+  \begin{itemize}
+    \item Kịch bản 1: Happy Path (Postman)
+    \item Kịch bản 2: Fault Tolerance
+    \item Kịch bản 3: Database per Service \& Deploy độc lập
+  \end{itemize}
+\end{frame}
+
+\section{Demo}
+
+\begin{frame}{Kịch bản 1 — Happy Path (Postman Collection Runner)}
+  \textbf{Chuẩn bị:} \texttt{.\textbackslash START.ps1 -SkipDocker} $\rightarrow$ \texttt{check-all-services.ps1} (10/10 UP).
+
+  \vspace{0.4em}
+  \textbf{Luồng demo (theo thứ tự folder Postman):}
+  \begin{enumerate}\small
+    \item \textbf{01 Login} — \texttt{khang\_test / 123456} $\rightarrow$ JWT
+    \item \textbf{02 Catalog} — GET products, categories
+    \item \textbf{03 Cart} — thêm sản phẩm vào giỏ
+    \item \textbf{04 Order} — preview coupon, checkout $\rightarrow$ 201
+    \item \textbf{05 Review} — tạo review (\texttt{isApproved=false})
+    \item \textbf{06 Statistics} — track VIEW; admin \texttt{admin/admin123}
+  \end{enumerate}
+
+  \vspace{0.4em}
+  \textbf{Minh chứng kèm theo:}
+  \begin{itemize}\small
+    \item Mở Eureka — thấy request qua Gateway tới nhiều service.
+    \item Tail log: \texttt{Get-Content .run\textbackslash order-service.log -Wait}.
+    \item (Nếu có) Zipkin trace: Gateway $\rightarrow$ order $\rightarrow$ cart $\rightarrow$ user.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Kịch bản 2 — Fault Tolerance}
+  \textbf{Thao tác:}
+  \begin{enumerate}\small
+    \item Dừng \textbf{statistics-service} (port 8088) hoặc AI Python (:5000).
+    \item Thực hiện lại luồng: Login $\rightarrow$ Cart $\rightarrow$ Checkout.
+  \end{enumerate}
+
+  \vspace{0.4em}
+  \textbf{Kết quả kỳ vọng:}
+  \begin{itemize}
+    \item Checkout vẫn \textbf{201 Created} — luồng mua hàng chính không phụ thuộc statistics.
+    \item Recommendations trả list rỗng hoặc 503 có kiểm soát — \textbf{không 500} toàn hệ thống.
+    \item OrderExceptionHandler map lỗi Feign — không crash JVM.
+  \end{itemize}
+
+  \vspace{0.3em}
+  \begin{block}{Thông điệp}
+    Microservices cho phép \textbf{cô lập lỗi}: service phụ trợ down $\neq$ sập core business.
+  \end{block}
+\end{frame}
+
+\begin{frame}{Kịch bản 3 — Tính độc lập dữ liệu \& Triển khai}
+  \textbf{Thao tác trên IDE (tab mở sẵn):}
+  \begin{itemize}
+    \item \texttt{order-service/.../application.yml} $\rightarrow$ \texttt{electro\_order\_db}
+    \item \texttt{cart-service/.../application.yml} $\rightarrow$ \texttt{electro\_cart\_db}
+    \item \texttt{statistics-service/.../application.yml} $\rightarrow$ \texttt{electro\_statistics\_db}
+  \end{itemize}
+
+  \vspace{0.4em}
+  \textbf{Chứng minh Feign thay vì cross-DB:}
+  \begin{itemize}
+    \item \texttt{OrderService.java} inject \texttt{CartClient}, \texttt{UserClient} — không JDBC cart DB.
+    \item Gateway chặn \texttt{/api/internal/**} — client không bypass.
+  \end{itemize}
+
+  \vspace{0.4em}
+  \textbf{Deploy độc lập:} Restart chỉ \texttt{review-service} — catalog, order vẫn UP trên Eureka; các API khác vẫn 200.
+\end{frame}
+
+\begin{frame}[fragile]{Demo — RBAC (bonus 30 giây)}
+  \textbf{Chứng minh phân quyền:}
+  \begin{itemize}
+    \item \texttt{admin / admin123} $\rightarrow$ GET \texttt{/api/admin/statistics/overview} = \textbf{200}
+    \item \texttt{sales / admin123} $\rightarrow$ cùng API = \textbf{403} (thiếu \texttt{REPORT\_REVENUE})
+    \item \texttt{khang\_test} (CUSTOMER) $\rightarrow$ \textbf{403}
+  \end{itemize}
+  \vspace{0.3em}
+  \begin{lstlisting}[caption={AdminStatisticsController.java}]
+@PreAuthorize("hasAnyAuthority('REPORT_REVENUE', 'ROLE_ADMIN')")
+public ResponseEntity<OverviewStatisticsDTO> getOverviewStatistics()
+  \end{lstlisting}
+\end{frame}
+
+% ============================================================
+% PHẦN 5: KẾT LUẬN (2 phút)
+% ============================================================
+\begin{frame}{Phần 5 — Kết luận \& Hướng phát triển}
+  \begin{itemize}
+    \item 5.1 Kết quả đạt được
+    \item 5.2 Khó khăn đã giải quyết
+    \item 5.3 Hướng phát triển
+  \end{itemize}
+\end{frame}
+
+\section{Kết luận}
+
+\begin{frame}{5.1. Kết quả đạt được}
+  \begin{itemize}
+    \item Xây dựng thành công \textbf{10 microservices} (7 nghiệp vụ + 3 hạ tầng), chạy ổn định local + cloud DB.
+    \item Triển khai \textbf{Database per Service} — 6 schema MySQL tách biệt trên Aiven.
+    \item \textbf{API Gateway} + JWT + RBAC theo role/permission.
+    \item Giao tiếp nội bộ \textbf{OpenFeign}; Internal API không expose qua Gateway.
+    \item Bộ \textbf{Postman full coverage} + smoke script cho từng service.
+    \item Luồng nghiệp vụ end-to-end: Auth $\rightarrow$ Catalog $\rightarrow$ Cart $\rightarrow$ Order $\rightarrow$ Review $\rightarrow$ Statistics.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{5.2. Khó khăn đã giải quyết}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{@{}p{4.2cm}p{7.8cm}@{}}
+      \toprule
+      \textbf{Khó khăn} & \textbf{Giải pháp} \\
+      \midrule
+      JWT thiếu permissions $\rightarrow$ 403 Order & Bổ sung permissions vào JWT + shared JwtAuthorityBuilder \\
+      Checkout 500 (Feign cart 403) & permitAll \texttt{/api/carts/internal/**} \\
+      Review sai nghiệp vụ DB & \texttt{isApproved=false}, moderation workflow \\
+      Statistics action type lệch DB & Chuẩn hóa CLICK$\rightarrow$CART, RATING$\rightarrow$RATED \\
+      Redis / Aiven cấu hình & \texttt{.env} + \texttt{REDIS\_URL}, \texttt{Test-RedisConnection.ps1} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+\begin{frame}{5.3. Hướng phát triển}
+  \begin{enumerate}
+    \item \textbf{Event-Driven:} Kafka/RabbitMQ cho notification sau checkout (tham khảo TLTN\_22130029).
+    \item \textbf{Observability:} Zipkin/Jaeger, Prometheus, Grafana.
+    \item \textbf{Resilience:} Circuit Breaker (Resilience4j) + Feign Fallback.
+    \item \textbf{CI/CD \& Cloud:} Docker Compose/Kubernetes, deploy Aiven + Redis production.
+    \item \textbf{Frontend:} React SPA gọi Gateway (full stack).
+  \end{enumerate}
+
+  \vspace{1em}
+  \centering
+  \Large\textbf{Cảm ơn Hội đồng đã lắng nghe!}
+
+  \vspace{0.5em}
+  \normalsize Sẵn sàng demo trực tiếp: Postman + Eureka + cấu hình DB.
+\end{frame}
+
+% ============================================================
+% PHỤ LỤC — TAB MỞ SẴN KHI BỊ HỎI
+% ============================================================
+\appendix
+\section*{Phụ lục}
+
+\begin{frame}[fragile]{Phụ lục A — Cấu hình DB (statistics-service)}
+\begin{lstlisting}
+# statistics-service/src/main/resources/application.yml
+spring:
+  datasource:
+    url: jdbc:mysql://.../electro_statistics_db?...
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Phụ lục B — Feign Client (order-service)}
+\begin{lstlisting}
+@FeignClient(name = "cart-service", path = "/api/carts")
+public interface CartClient {
+    @GetMapping("/internal/{userId}")
+    CartDto getCartByUserId(@PathVariable Long userId);
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Phụ lục C — Lệnh demo nhanh}
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Lệnh} & \textbf{Mục đích} \\
+    \midrule
+    \texttt{.\textbackslash START.ps1 -SkipDocker} & Khởi động stack \\
+    \texttt{.\textbackslash check-all-services.ps1} & Health 10/10 \\
+    \texttt{.\textbackslash scripts\textbackslash Test-Order-Service-Full.ps1} & Smoke order \\
+    \texttt{python api-tests/generate\_order\_collection.py} & Sinh Postman \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+\end{document}

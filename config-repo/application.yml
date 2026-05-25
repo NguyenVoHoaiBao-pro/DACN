@@ -1,0 +1,104 @@
+# Global Default Configuration for all microservices
+spring:
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Ho_Chi_Minh
+  # Aiven MySQL (goi nho ~20 connection): 5 service x 3 pool = 15 (du cho dev)
+  datasource:
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 20000
+      max-lifetime: 280000
+      idle-timeout: 120000
+  cloud:
+    openfeign:
+      micrometer:
+        enabled: true
+    inetutils:
+      # Tránh Eureka đăng ký hostname Windows *.mshome.net (Gateway DNS lỗi → login 500)
+      preferred-networks: 127.0.0.1
+      default-hostname: localhost
+      default-ip-address: 127.0.0.1
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    ip-address: 127.0.0.1
+    hostname: localhost
+    instance-id: ${spring.application.name}:${server.port}
+
+# =============================================================================
+# Distributed Tracing — ap dung TAT CA microservice qua config-server
+# Zipkin UI: http://localhost:9411  |  docker compose up -d zipkin
+# Dependencies: module shared/pom.xml (OTEL + Zipkin + feign-micrometer)
+# =============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: w3c,b3
+    logging:
+      enabled: true
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+# Console / IntelliJ: [ten-service, traceId, spanId] — cung traceId tren Zipkin
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} ${LOG_LEVEL_PATTERN} %logger{36} : %m%n"
+
+# =============================================================================
+# Payment Gateway — order-service (VNPay / MoMo / ZaloPay)
+# Nguon: electro-store-backend/application.properties (Sandbox da test)
+# VNPay Sandbox portal: https://sandbox.vnpayment.vn/merchantv2/
+# Return URL + IPN URL tren portal VNPay:
+#   http://localhost:8080/api/payment/vnpay/return
+#   http://localhost:8080/api/payment/vnpay/ipn
+# =============================================================================
+payment:
+  frontend-success-url: ${PAYMENT_FRONTEND_SUCCESS_URL:http://localhost:5173/payment/success}
+  frontend-fail-url: ${PAYMENT_FRONTEND_FAIL_URL:http://localhost:5173/payment/fail}
+  backend-base-url: ${PAYMENT_BACKEND_BASE_URL:http://localhost:8080}
+
+  vnpay:
+    tmn-code: ${VNPAY_TMN_CODE:1T0D4TUS}
+    hash-secret: ${VNPAY_HASH_SECRET:UNVQ0K206FIK1H2PNV667HPWJ2ARZMWD}
+    pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+    api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+    return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/payment/vnpay/return}
+    version: "2.1.0"
+    command: pay
+    order-type: other
+    locale: vn
+    curr-code: VND
+
+  momo:
+    partner-code: ${MOMO_PARTNER_CODE:YOUR_PARTNER_CODE}
+    access-key: ${MOMO_ACCESS_KEY:YOUR_ACCESS_KEY}
+    secret-key: ${MOMO_SECRET_KEY:YOUR_SECRET_KEY}
+    api-url: ${MOMO_API_URL:https://test-payment.momo.vn/v2/gateway/api/create}
+    return-url: ${MOMO_RETURN_URL:http://localhost:8080/api/payment/momo/return}
+    ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payment/momo/ipn}
+    request-type: payWithMethod
+
+  zalopay:
+    app-id: ${ZALOPAY_APP_ID:YOUR_APP_ID}
+    key1: ${ZALOPAY_KEY1:YOUR_KEY_1}
+    key2: ${ZALOPAY_KEY2:YOUR_KEY_2}
+    create-order-url: ${ZALOPAY_CREATE_ORDER_URL:https://sb-openapi.zalopay.vn/v2/create}
+    query-order-url: ${ZALOPAY_QUERY_ORDER_URL:https://sb-openapi.zalopay.vn/v2/query}
+    refund-url: ${ZALOPAY_REFUND_URL:https://sb-openapi.zalopay.vn/v2/refund}
+    callback-url: ${ZALOPAY_CALLBACK_URL:http://localhost:8080/api/payment/zalopay/callback}
+    redirect-url: ${ZALOPAY_REDIRECT_URL:http://localhost:8080/api/payment/zalopay/return}
+

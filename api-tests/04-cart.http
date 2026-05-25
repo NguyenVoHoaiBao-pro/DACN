@@ -1,0 +1,17 @@
+# Cart — cần JWT
+@cart = {{cart}}
+@token = {{token}}
+
+### Lấy giỏ hàng
+GET {{cart}}/api/cart
+Authorization: Bearer {{token}}
+
+### Thêm variant vào giỏ (variantId=115 — product 1)
+POST {{cart}}/api/cart
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "variantId": 115,
+  "quantity": 1
+}

@@ -1,0 +1,12 @@
+**/target
+**/.git
+**/.idea
+**/.vscode
+**/*.iml
+**/node_modules
+**/*.log
+**/.cursor
+**/agent-tools
+**/agent-transcripts
+**/mvn_out.txt
+**/init.py

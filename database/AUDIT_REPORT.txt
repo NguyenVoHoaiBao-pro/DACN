@@ -1,0 +1,145 @@
+========================================================================
+AUDIT: electro_store_db.sql  ->  database/schemas/*.sql
+========================================================================
+
+[1] PHỦ BẢNG (39 bảng từ DB cha)
+  DB cha:     39 bảng
+  DB con:     39 bảng (6 file)
+  Thiếu bảng: KHÔNG
+  Thừa bảng:  KHÔNG
+  Chưa map:   KHÔNG
+  Sai DB:     KHÔNG
+
+[2] SỐ RECORD (INSERT) — so với DB cha
+  Bảng                         DB con                      Cha      Con   OK
+  ---------------------------- ---------------------- -------- -------- ----
+  attribute_values             electro_catalog_db           41       41   OK
+  attributes                   electro_catalog_db           11       11   OK
+  audit_logs                   electro_statistics_db        16       16   OK
+  cart_items                   electro_cart_db               0        0   OK
+  carts                        electro_cart_db              18       18   OK
+  coupons                      electro_order_db              7        7   OK
+  images                       electro_catalog_db          856      856   OK
+  inventory_transactions       electro_catalog_db           12       12   OK
+  order_details                electro_order_db             58       58   OK
+  order_item_serials           electro_order_db              3        3   OK
+  orders                       electro_order_db             50       50   OK
+  password_reset_tokens        electro_user_db               4        4   OK
+  payment_transactions         electro_order_db             16       16   OK
+  permissions                  electro_user_db              25       25   OK
+  producers                    electro_catalog_db           67       67   OK
+  product_items                electro_catalog_db           20       20   OK
+  product_specifications       electro_catalog_db           53       53   OK
+  product_types                electro_catalog_db           18       18   OK
+  product_variants             electro_catalog_db         1628     1628   OK
+  products                     electro_catalog_db          587      587   OK
+  purchase_order_items         electro_catalog_db           19       19   OK
+  purchase_orders              electro_catalog_db            9        9   OK
+  qr_auth_tokens               electro_user_db              22       22   OK
+  review_images                electro_review_db             7        7   OK
+  reviews                      electro_review_db            12       12   OK
+  role_permissions             electro_user_db              50       50   OK
+  roles                        electro_user_db               5        5   OK
+  settings                     electro_catalog_db           21       21   OK
+  shipping_methods             electro_order_db              5        5   OK
+  specifications               electro_catalog_db           19       19   OK
+  suppliers                    electro_catalog_db           11       11   OK
+  user_addresses               electro_user_db              13       13   OK
+  user_interactions            electro_statistics_db     10227    10227   OK
+  user_roles                   electro_user_db              18       18   OK
+  users                        electro_user_db            8289     8289   OK
+  variant_attribute_values     electro_catalog_db         1621     1621   OK
+  warranty_claims              electro_order_db              8        8   OK
+  warranty_tickets             electro_order_db             11       11   OK
+  wishlists                    electro_user_db              32       32   OK
+
+  Tổng record DB cha: 23,889
+  Tổng record DB con: 23,889
+  Khớp tổng:          CÓ
+
+[3] CẤU TRÚC BẢNG (CREATE TABLE — số cột)
+  Tất cả 39 bảng giữ nguyên số cột và tên cột.
+
+[4] INDEX & AUTO_INCREMENT (ALTER TABLE)
+  PK, INDEX, AUTO_INCREMENT đầy đủ (FK liên service đã gỡ — đúng kiến trúc microservice).
+
+[5] CHI TIẾT TỪNG FILE DB CON
+
+  electro_catalog_db.sql (catalog-service :8082)
+    Kích thước: 693.1 KB
+    Bảng:       16
+    Records:    4,993
+      • attribute_values: 41 record
+      • attributes: 11 record
+      • images: 856 record
+      • inventory_transactions: 12 record
+      • producers: 67 record
+      • product_items: 20 record
+      • product_specifications: 53 record
+      • product_types: 18 record
+      • product_variants: 1,628 record
+      • products: 587 record
+      • purchase_order_items: 19 record
+      • purchase_orders: 9 record
+      • settings: 21 record
+      • specifications: 19 record
+      • suppliers: 11 record
+      • variant_attribute_values: 1,621 record
+
+  electro_cart_db.sql (cart-service :8084)
+    Kích thước: 3.3 KB
+    Bảng:       2
+    Records:    18
+      • cart_items: 0 record (trống — DB cha cũng trống)
+      • carts: 18 record
+
+  electro_order_db.sql (order-service :8086)
+    Kích thước: 77.0 KB
+    Bảng:       8
+    Records:    158
+      • coupons: 7 record
+      • order_details: 58 record
+      • order_item_serials: 3 record
+      • orders: 50 record
+      • payment_transactions: 16 record
+      • shipping_methods: 5 record
+      • warranty_claims: 8 record
+      • warranty_tickets: 11 record
+
+  electro_user_db.sql (user-service :8083)
+    Kích thước: 1,990.4 KB
+    Bảng:       9
+    Records:    8,458
+      • password_reset_tokens: 4 record
+      • permissions: 25 record
+      • qr_auth_tokens: 22 record
+      • role_permissions: 50 record
+      • roles: 5 record
+      • user_addresses: 13 record
+      • user_roles: 18 record
+      • users: 8,289 record
+      • wishlists: 32 record
+
+  electro_review_db.sql (review-service :8087)
+    Kích thước: 7.5 KB
+    Bảng:       2
+    Records:    19
+      • review_images: 7 record
+      • reviews: 12 record
+
+  electro_statistics_db.sql (statistics-service :8088)
+    Kích thước: 642.9 KB
+    Bảng:       2
+    Records:    10,243
+      • audit_logs: 16 record
+      • user_interactions: 10,227 record
+
+[6] GHI CHÚ
+  • cart_items: 0 record — DB cha cũng không có dữ liệu (bình thường).
+  • FK cross-service (reviews→products, cart_items→variants, …) đã bỏ trong file con.
+  • Các service vẫn giữ Integer FK; validate qua Feign/API ở tầng ứng dụng.
+  • File con có: CREATE TABLE + INSERT + ALTER (PK/INDEX/AUTO_INCREMENT).
+
+========================================================================
+KẾT LUẬN: ĐẦY ĐỦ — 39/39 bảng, 100% record khớp DB cha.
+========================================================================
