@@ -1,0 +1,46 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: chatbot-service
+  profiles:
+    active: dev
+  config:
+    import: "optional:configserver:http://localhost:8888"
+
+  ai:
+    openai:
+      api-key: ${NVIDIA_API_KEY:nvapi-dummy-key-replace-this}
+      base-url: https://integrate.api.nvidia.com
+      chat:
+        options:
+          model: ${NVIDIA_CHAT_MODEL:meta/llama-3.1-8b-instruct}
+      embedding:
+        options:
+          model: ${NVIDIA_EMBEDDING_MODEL:nvidia/nv-embed-v1}
+    vectorstore:
+      chroma:
+        client:
+          host: ${CHROMA_HOST:http://localhost}
+          port: ${CHROMA_PORT:8000}
+        collection-name: electro-store-products
+
+# RAG: ngưỡng 0 = lấy topK từ Chroma (collection mặc định dùng L2; ngưỡng >0 dễ lọc sạch mọi kết quả)
+rag:
+  top-k: ${RAG_TOP_K:4}
+  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.0}
+  ingest:
+    page-size: ${RAG_INGEST_PAGE_SIZE:50}
+    include-reviews: ${RAG_INGEST_INCLUDE_REVIEWS:false}
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 5000
+
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+

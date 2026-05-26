@@ -49,6 +49,20 @@ services:
     ports:
       - "9411:9411"
 
+  # Vector Database cho Chatbot
+  chromadb:
+    image: chromadb/chroma:0.5.3
+    container_name: electro-chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - electro_chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+
 volumes:
   electro_mysql_data:
   electro_redis_data:
+  electro_chroma_data:
