@@ -186,7 +186,7 @@ const StoreChatbot = () => {
       } catch (err) {
         if (!cancelled) {
           setHealthOk(false);
-          setHealthLabel("API trợ lý chưa chạy (port 8000)");
+          setHealthLabel("API trợ lý chưa chạy (chatbot-service :8092)");
           console.warn("[Chatbot] Health exception:", err);
         }
       }

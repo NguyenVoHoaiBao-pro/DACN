@@ -204,7 +204,7 @@ function Get-ElectroServices {
         @{ Name = 'order-service';    Port = 8086; Phase = 3; Description = 'Order + Warranty' }
         @{ Name = 'review-service';   Port = 8087; Phase = 3; Description = 'Reviews' }
         @{ Name = 'statistics-service'; Port = 8088; Phase = 3; Description = 'Statistics + Redis' }
-        @{ Name = 'chatbot-service';  Port = 8092; Phase = 3; Description = 'Chatbot RAG + Chroma' }
+        @{ Name = 'chatbot-service';  Port = 8092; Phase = 3; Description = 'Chatbot RAG + Pinecone' }
         @{ Name = 'api-gateway';      Port = 8080; Phase = 4; Description = 'API Gateway'; WaitAfterSec = 12 }
     )
 }
@@ -235,7 +235,17 @@ function Start-ElectroService {
 
     $logFile = Join-Path $RunDir "$($Service.Name).log"
     $javaOpts = '-Xms128m -Xmx384m'
+    $commonScript = Join-Path $Root 'scripts\_common.ps1'
+    $envFile = Join-Path $Root '.env'
+    $dotenvCmd = ''
+    if (Test-Path $envFile) {
+        $dotenvCmd = @"
+. '$commonScript'
+Import-DotEnv -Path '$envFile'
+"@
+    }
     $cmd = @"
+$dotenvCmd
 Set-Location '$modulePath'
 `$env:JAVA_TOOL_OPTIONS = '$javaOpts'
 & '$Maven' spring-boot:run -q 2>&1 | Tee-Object -FilePath '$logFile'

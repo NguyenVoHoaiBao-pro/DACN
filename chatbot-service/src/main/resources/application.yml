@@ -20,16 +20,25 @@ spring:
         options:
           model: ${NVIDIA_EMBEDDING_MODEL:nvidia/nv-embed-v1}
     vectorstore:
-      chroma:
-        client:
-          host: ${CHROMA_HOST:http://localhost}
-          port: ${CHROMA_PORT:8000}
-        collection-name: electro-store-products
+      pinecone:
+        api-key: ${PINECONE_API_KEY}
+        index-name: ${PINECONE_INDEX_NAME:electro-store-products}
+        namespace: ${PINECONE_NAMESPACE:}
+        server-side-timeout: ${PINECONE_TIMEOUT:30s}
 
-# RAG: ngưỡng 0 = lấy topK từ Chroma (collection mặc định dùng L2; ngưỡng >0 dễ lọc sạch mọi kết quả)
+# Phase 2 RAG: hybrid (dense NVIDIA + sparse Pinecone) + rerank
 rag:
   top-k: ${RAG_TOP_K:4}
+  retrieval-top-k: ${RAG_RETRIEVAL_TOP_K:40}
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.0}
+  hybrid:
+    enabled: ${RAG_HYBRID_ENABLED:true}
+    alpha: ${RAG_HYBRID_ALPHA:0.75}
+    sparse-model: ${RAG_SPARSE_MODEL:pinecone-sparse-english-v0}
+  rerank:
+    enabled: ${RAG_RERANK_ENABLED:true}
+    model: ${RAG_RERANK_MODEL:bge-reranker-v2-m3}
+    top-n: ${RAG_RERANK_TOP_N:4}
   ingest:
     page-size: ${RAG_INGEST_PAGE_SIZE:50}
     include-reviews: ${RAG_INGEST_INCLUDE_REVIEWS:false}
@@ -43,4 +52,3 @@ feign:
 
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-

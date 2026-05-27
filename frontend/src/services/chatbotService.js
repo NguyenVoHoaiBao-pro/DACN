@@ -78,7 +78,7 @@ export async function sendChatMessageStream({
 }) {
   if (onStatus) {
     onStatus({ phase: "started", message: "Đã tiếp nhận câu hỏi..." });
-    onStatus({ phase: "retrieving", message: "Đang truy vấn dữ liệu từ ChromaDB..." });
+    onStatus({ phase: "retrieving", message: "Đang truy vấn dữ liệu từ Pinecone..." });
     onStatus({ phase: "generating", message: "Đang tổng hợp câu trả lời từ AI..." });
   }
 

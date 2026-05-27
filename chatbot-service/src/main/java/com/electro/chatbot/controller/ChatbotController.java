@@ -1,5 +1,6 @@
 package com.electro.chatbot.controller;
 
+import com.electro.chatbot.config.RagProperties;
 import com.electro.chatbot.service.ProductIngestionService;
 import com.electro.chatbot.service.RagChatbotService;
 import com.electro.shared.dto.ApiResponse;
@@ -28,24 +29,46 @@ public class ChatbotController {
 
     private final RagChatbotService ragChatbotService;
     private final ProductIngestionService productIngestionService;
+    private final RagProperties ragProperties;
 
     private final AtomicBoolean ingestRunning = new AtomicBoolean(false);
 
     @GetMapping("/rag-status")
-    @Operation(summary = "Trạng thái index RAG (ChromaDB)")
+    @Operation(summary = "Trạng thái index RAG (Pinecone)")
     public ResponseEntity<ApiResponse<Map<String, Object>>> ragStatus() {
-        boolean empty = ragChatbotService.isVectorIndexEmpty();
-        return ResponseEntity.ok(ApiResponse.success("OK", Map.of(
+        boolean empty = true;
+        String probeError = null;
+        try {
+            empty = ragChatbotService.isVectorIndexEmpty();
+        } catch (Exception e) {
+            probeError = e.getMessage();
+            log.warn("rag-status probe failed: {}", probeError);
+        }
+
+        String hint = probeError != null
+                ? "Không kiểm tra được Pinecone: " + probeError
+                        + " — kiểm tra PINECONE_API_KEY trong .env, restart chatbot-service."
+                : empty
+                        ? "Chạy scripts/Setup-PineconeHybridIndex.ps1 rồi Reingest-Chatbot.ps1 (index dotproduct + hybrid)."
+                        : "Index đã có dữ liệu — có thể chat.";
+
+        Map<String, Object> data = new java.util.HashMap<>(Map.of(
                 "indexEmpty", empty,
                 "ingestRunning", ingestRunning.get(),
-                "hint", empty
-                        ? "Chạy POST /api/chatbot/ingest (Admin) và đợi 5–15 phút."
-                        : "Index đã có dữ liệu — có thể chat."
-        )));
+                "hybridEnabled", ragProperties.getHybrid().isEnabled(),
+                "rerankEnabled", ragProperties.getRerank().isEnabled(),
+                "retrievalTopK", ragProperties.getRetrievalTopK(),
+                "finalTopK", ragProperties.getTopK(),
+                "hint", hint
+        ));
+        if (probeError != null) {
+            data.put("probeError", probeError);
+        }
+        return ResponseEntity.ok(ApiResponse.success("OK", data));
     }
 
     @PostMapping("/chat")
-    @Operation(summary = "Gửi tin nhắn trò chuyện với Chatbot RAG", description = "AI tự động tìm kiếm ngữ cảnh sản phẩm & review trong ChromaDB để tư vấn chính xác nhất")
+    @Operation(summary = "Gửi tin nhắn trò chuyện với Chatbot RAG", description = "AI tự động tìm kiếm ngữ cảnh sản phẩm trong Pinecone để tư vấn chính xác nhất")
     public ResponseEntity<ApiResponse<ChatResponse>> chat(@RequestBody ChatRequest request) {
         if (request == null || request.getMessage() == null || request.getMessage().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, "Nội dung tin nhắn không được để trống"));
@@ -57,15 +80,15 @@ public class ChatbotController {
 
     @PostMapping("/ingest")
     @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'ROLE_ADMIN')")
-    @Operation(summary = "Kích hoạt đồng bộ dữ liệu thủ công từ Microservices sang ChromaDB", description = "Chỉ cho phép tài khoản Admin thực hiện")
+    @Operation(summary = "Kích hoạt đồng bộ dữ liệu thủ công từ Microservices sang Pinecone", description = "Chỉ cho phép tài khoản Admin thực hiện")
     public ResponseEntity<ApiResponse<String>> triggerIngestion() {
         if (!ingestRunning.compareAndSet(false, true)) {
             return ResponseEntity.ok(ApiResponse.success(
-                    "Đồng bộ ChromaDB đang chạy nền — vui lòng đợi vài phút rồi kiểm tra GET /api/chatbot/rag-status.",
+                    "Đồng bộ Pinecone đang chạy nền — vui lòng đợi vài phút rồi kiểm tra GET /api/chatbot/rag-status.",
                     null));
         }
 
-        log.info("Admin đã kích hoạt đồng bộ dữ liệu thủ công sang ChromaDB (nền).");
+        log.info("Admin đã kích hoạt đồng bộ dữ liệu thủ công sang Pinecone (nền).");
         CompletableFuture.runAsync(() -> {
             try {
                 productIngestionService.ingestAllProducts();
@@ -76,7 +99,7 @@ public class ChatbotController {
 
         return ResponseEntity.accepted()
                 .body(ApiResponse.success(
-                        "Đã bắt đầu đồng bộ sản phẩm sang ChromaDB trên nền (khoảng 5–15 phút). Kiểm tra GET /api/chatbot/rag-status.",
+                        "Đã bắt đầu đồng bộ sản phẩm sang Pinecone trên nền (khoảng 5–15 phút). Kiểm tra GET /api/chatbot/rag-status.",
                         null));
     }
 
