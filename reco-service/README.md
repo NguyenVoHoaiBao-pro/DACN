@@ -16,10 +16,7 @@ reco-service/
 ├── scripts/
 │   ├── SETUP_ENV.ps1
 │   ├── RUN_TRAINING.ps1
-│   ├── START_SERVER.ps1
-│   └── metrics_eval.py         # EDA / đánh giá (tùy chọn)
-├── docs/                       # SQL seed, biểu đồ, Postman
-├── tests/
+│   └── START_SERVER.ps1
 └── requirements.txt
 ```
 

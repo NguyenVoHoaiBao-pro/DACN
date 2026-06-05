@@ -6,21 +6,14 @@
 |------|----------|
 | Chạy hệ thống | `START.ps1`, `STOP.ps1`, `check-all-services.ps1` (thư mục gốc) |
 | Cấu hình `.env`, Redis, MySQL | [ENV_AND_REDIS.md](ENV_AND_REDIS.md) |
-| Test auth (Postman) | [../api-tests/AUTH_POSTMAN_GUIDE.md](../api-tests/AUTH_POSTMAN_GUIDE.md) |
-| Test user (Postman, sau auth) | [../api-tests/USER_POSTMAN_GUIDE.md](../api-tests/USER_POSTMAN_GUIDE.md) |
-| Tổng quan auth-service | [AUTH_SERVICE.md](AUTH_SERVICE.md) |
-| Tổng quan user-service | [USER_SERVICE.md](USER_SERVICE.md) |
-| Test từng service | [TEST_EACH_SERVICE.md](TEST_EACH_SERVICE.md) |
-| URL Swagger | [SWAGGER_URLS.txt](SWAGGER_URLS.txt) |
+| Chatbot / Pinecone | [CHATBOT_PINECONE.md](CHATBOT_PINECONE.md) |
+| Reco-service (AI gợi ý) | [../reco-service/README.md](../reco-service/README.md) |
 
-## Scripts
+## Scripts vận hành
 
 | Script | Mô tả |
 |--------|--------|
-| `scripts/Test-RedisConnection.ps1` | Kiểm tra Redis Cloud |
-| `scripts/Test-Each-Service.ps1` | Smoke test API |
-| `scripts/Open-Swagger.ps1` | Mở Swagger browser |
-
-## api-tests/
-
-[api-tests/README.md](../api-tests/README.md) — REST Client, Postman, file `.http`.
+| `scripts/Start-Infra.ps1` | Khởi động Docker (MySQL, Redis, …) |
+| `scripts/Import-Databases.ps1` | Import schema/dữ liệu MySQL |
+| `scripts/Reingest-Chatbot.ps1` | Nạp lại dữ liệu chatbot RAG |
+| `scripts/Setup-PineconeHybridIndex.ps1` | Tạo Pinecone index cho chatbot |

@@ -119,4 +119,4 @@ API: `POST /api/auth/google` body `{ "idToken": "..." }`.
 | Dùng cho | URL test, user/password Postman | Spring Boot khi `START.ps1` |
 | Redis | Không đọc `.env` | auth/statistics đọc `REDIS_*` |
 
-Xem thêm: [api-tests/AUTH_POSTMAN_GUIDE.md](../api-tests/AUTH_POSTMAN_GUIDE.md)
+Swagger UI: `http://localhost:8081/swagger-ui/index.html` (auth-service) và các service tương ứng (xem output của `START.ps1`).

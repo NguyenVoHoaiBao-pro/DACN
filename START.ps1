@@ -160,8 +160,6 @@ Write-Host '  review-service:    http://localhost:8087/swagger-ui/index.html'
 Write-Host '  statistics-service:http://localhost:8088/swagger-ui/index.html'
 Write-Host '  reco-service:        http://localhost:5003/docs  (FastAPI, Eureka: reco-service)'
 Write-Host ''
-Write-Host 'Mo Swagger:           .\scripts\Open-Swagger.ps1 -Service catalog' -ForegroundColor Yellow
-Write-Host 'Demo tracing:         .\scripts\Demo-DistributedTracing.ps1' -ForegroundColor Yellow
 Write-Host 'Kiem tra trang thai:  .\check-all-services.ps1' -ForegroundColor Yellow
 Write-Host 'Dung he thong:        .\STOP.ps1' -ForegroundColor Yellow
 Write-Host ''

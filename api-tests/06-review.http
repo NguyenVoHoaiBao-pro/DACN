@@ -1,8 +1,0 @@
-# Review — đọc public
-@review = {{review}}
-
-### Đánh giá theo sản phẩm
-GET {{review}}/api/reviews?product_id=1&page=0&size=10
-
-### Tóm tắt đánh giá
-GET {{review}}/api/reviews/summary?product_id=1
