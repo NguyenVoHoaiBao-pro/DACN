@@ -1,0 +1,20 @@
+# Không mang Tạp chất Máy trạm vào Môi trường Đóng gói Container
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.vscode/
+
+# KHÔNG đóng gói File Rác Data Khổng Lồ 100MB vào Image (Nhẹ Image)
+data/raw/events.csv
+
+# Archive model cũ (không cần trong image)
+collaborativefiltering/asset/archive/
+notebooks/
+ThamKhaoNotebookCuaCacTacGia/
+
+# Thư mục hệ thống của macOS/Windows
+.DS_Store
+Thumbs.db

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -40,6 +40,7 @@ import {
   Typography,
   CircularProgress,
   Tooltip,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -51,6 +52,7 @@ import { getCategories, getProducers } from "../../services/masterService";
 import { toast } from "react-toastify";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
 import HasPermission from "../../components/Auth/HasPermission";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   adminGetProducts,
   adminGetProductStats,
@@ -61,6 +63,8 @@ import { isApiSuccess } from "../../utils/apiResponse";
 
 const ProductManagementPage = () => {
   const navigate = useNavigate();
+  const { isSalesUser, hasPermission } = usePermissions();
+  const readOnlyCatalog = isSalesUser && !hasPermission("PRODUCT_MANAGE");
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalElements, setTotalElements] = useState(0);
@@ -160,8 +164,11 @@ const ProductManagementPage = () => {
         toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
         navigate("/login");
       } else if (error.response?.status === 403) {
-        toast.error("Bạn không có quyền thực hiện thao tác này");
-        navigate("/admin");
+        toast.error(
+          readOnlyCatalog
+            ? "Không có quyền tra cứu catalog. Đăng xuất và đăng nhập lại, hoặc liên hệ Admin."
+            : "Bạn không có quyền thực hiện thao tác này"
+        );
       }
     } finally {
       setLoading(false);
@@ -255,16 +262,32 @@ const ProductManagementPage = () => {
   };
 
   return (
-    <AdminLayout currentPage="Sản phẩm">
+    <AdminLayout currentPage={readOnlyCatalog ? "Tra cứu sản phẩm" : "Sản phẩm"}>
       <Box sx={{ p: 3 }}>
+        {readOnlyCatalog && (
+          <Alert
+            severity="info"
+            sx={{ mb: 2 }}
+            action={
+              <Button component={Link} to="/admin/inventory" size="small" color="inherit">
+                Mở tư vấn tồn kho
+              </Button>
+            }
+          >
+            Chế độ <strong>tra cứu</strong> — tìm theo tên/SKU. Quét IMEI tại{" "}
+            <Link to="/admin/inventory">Tồn kho & tư vấn</Link>.
+          </Alert>
+        )}
         {/* Header Section */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
           <Box>
             <Typography variant="h4" fontWeight={950} color="#1e293b" sx={{ letterSpacing: -0.5, mb: 1 }}>
-              📦 Quản Lý Sản Phẩm
+              {readOnlyCatalog ? "🔍 Tra Cứu Sản Phẩm" : "📦 Quản Lý Sản Phẩm"}
             </Typography>
             <Typography variant="body2" color="text.secondary" fontWeight={600} sx={{ opacity: 0.8 }}>
-              Quản lý danh sách sản phẩm, thêm mới, chỉnh sửa và cập nhật kho hàng
+              {readOnlyCatalog
+                ? "Tìm theo tên hoặc mã SKU — xem tồn sẵn bán. Quét IMEI tại mục Tồn kho."
+                : "Quản lý danh sách sản phẩm, thêm mới, chỉnh sửa và cập nhật kho hàng"}
             </Typography>
           </Box>
           <HasPermission permission="PRODUCT_CREATE">
@@ -376,7 +399,7 @@ const ProductManagementPage = () => {
             <Toolbar sx={{ px: 0, flexWrap: "wrap", gap: 2 }}>
               {/* Search */}
               <TextField
-                placeholder="Tìm kiếm sản phẩm..."
+                placeholder={readOnlyCatalog ? "Tên sản phẩm hoặc mã SKU..." : "Tìm kiếm sản phẩm..."}
                 variant="outlined"
                 size="small"
                 value={searchQuery}
@@ -485,7 +508,7 @@ const ProductManagementPage = () => {
                     Giá bán
                   </TableCell>
                   <TableCell align="center" sx={{ fontWeight: "bold" }}>
-                    Tồn kho
+                    {readOnlyCatalog ? "Sẵn bán" : "Tồn kho"}
                   </TableCell>
                   <TableCell align="center" sx={{ fontWeight: "bold" }}>
                     Trạng thái
@@ -566,12 +589,18 @@ const ProductManagementPage = () => {
                         <Typography
                           variant="body2"
                           sx={{
-                            color: getStockColor(product.totalQuantity),
-                            fontWeight: product.totalQuantity <= 10 ? "bold" : "normal",
+                            color: getStockColor(
+                              readOnlyCatalog ? product.totalAvailableQuantity : product.totalQuantity
+                            ),
+                            fontWeight: (readOnlyCatalog ? product.totalAvailableQuantity : product.totalQuantity) <= 10
+                              ? "bold"
+                              : "normal",
                           }}
                         >
-                          {product.totalQuantity ?? 0}
-                          {product.totalQuantity === 0 && (
+                          {readOnlyCatalog
+                            ? (product.totalAvailableQuantity ?? 0)
+                            : (product.totalQuantity ?? 0)}
+                          {(readOnlyCatalog ? product.totalAvailableQuantity : product.totalQuantity) === 0 && (
                             <Typography variant="caption" display="block" color="error.main">
                               Hết hàng
                             </Typography>

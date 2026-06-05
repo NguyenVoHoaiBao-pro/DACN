@@ -13,7 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -119,6 +123,7 @@ public class InventoryService {
                 .map(v -> InventoryDto.InventoryStat.builder()
                         .variantId(v.getId())
                         .skuCode(v.getSkuCode())
+                        .productName(v.getProduct() != null ? v.getProduct().getName() : null)
                         .variantName(v.getVariantName())
                         .stockQuantity(v.getStockQuantity())
                         .lowStockThreshold(v.getLowStockThreshold())
@@ -151,13 +156,37 @@ public class InventoryService {
     }
 
     public List<InventoryDto.InventoryResponse> getInventoryTransactions() {
-        return inventoryTransactionRepository.findAllByOrderByCreatedAtDesc().stream()
+        List<InventoryTransaction> transactions = inventoryTransactionRepository.findAllByOrderByCreatedAtDesc();
+        Set<Integer> variantIds = transactions.stream()
+                .map(InventoryTransaction::getVariantId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Integer, ProductVariant> variantMap = new HashMap<>();
+        if (!variantIds.isEmpty()) {
+            productVariantRepository.findAllByIdWithProduct(variantIds)
+                    .forEach(v -> variantMap.put(v.getId(), v));
+        }
+
+        return transactions.stream()
                 .map(tx -> {
                     String imei = null;
                     if (tx.getProductItemId() != null) {
                         imei = productItemRepository.findById(tx.getProductItemId())
                                 .map(ProductItem::getImei)
                                 .orElse(null);
+                    }
+                    String productName = null;
+                    String variantName = null;
+                    String skuCode = null;
+                    if (tx.getVariantId() != null) {
+                        ProductVariant variant = variantMap.get(tx.getVariantId());
+                        if (variant != null) {
+                            variantName = variant.getVariantName();
+                            skuCode = variant.getSkuCode();
+                            if (variant.getProduct() != null) {
+                                productName = variant.getProduct().getName();
+                            }
+                        }
                     }
                     return InventoryDto.InventoryResponse.builder()
                             .id(tx.getId())
@@ -168,6 +197,9 @@ public class InventoryService {
                             .reason(tx.getReason())
                             .createdAt(tx.getCreatedAt())
                             .variantId(tx.getVariantId())
+                            .skuCode(skuCode)
+                            .productName(productName)
+                            .variantName(variantName)
                             .productItemId(tx.getProductItemId())
                             .imei(imei)
                             .userId(tx.getUserId())

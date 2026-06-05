@@ -73,6 +73,14 @@ public class GHNConfig {
      */
     private String fromWardCode = "90737";
 
+    /** Tên / SĐT / địa chỉ kho nhận máy bảo hành (đích đến khi thu hồi) */
+    private String warehouseName = "Electro Store - Kho Bảo Hành";
+    private String warehousePhone = "0900000000";
+    private String warehouseAddress = "Kho Electro Store, TP. Hồ Chí Minh";
+    private String warehouseWardName = "Phường Bến Nghé";
+    private String warehouseDistrictName = "Quận 1";
+    private String warehouseProvinceName = "Hồ Chí Minh";
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cấu hình đơn hàng mặc định (Default Package Settings)
     // ═══════════════════════════════════════════════════════════════════════════

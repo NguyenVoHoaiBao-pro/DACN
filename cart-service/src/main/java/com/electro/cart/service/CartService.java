@@ -180,10 +180,12 @@ public class CartService {
         CartDto.CartVariantDto variant = catalogClient.getVariantForCart(item.getVariantId());
 
         double unitPrice = 0.0;
-        if (item.getUnitPrice() != null) {
-            unitPrice = item.getUnitPrice().doubleValue();
-        } else if (variant != null && variant.getPrice() != null) {
+        // BẢN VÁ LỖI (FIX): Luôn ưu tiên lấy giá MỚI NHẤT từ Catalog (tránh lỗi ngâm giỏ hàng qua đợt Flash Sale)
+        if (variant != null && variant.getPrice() != null) {
             unitPrice = variant.getPrice();
+        } else if (item.getUnitPrice() != null) {
+            // Backup: Chỉ dùng giá đồ cổ trong DB nếu kết nối sang Catalog bị lỗi
+            unitPrice = item.getUnitPrice().doubleValue();
         }
         ir.setUnitPrice(unitPrice);
         ir.setSubtotal(Math.round(unitPrice * item.getQuantity() * 100.0) / 100.0);

@@ -1,5 +1,19 @@
 package com.electro.review.service;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.electro.review.client.CatalogClient;
 import com.electro.review.client.OrderClient;
 import com.electro.review.client.UserClient;
@@ -8,22 +22,8 @@ import com.electro.review.dto.ReviewDto;
 import com.electro.review.dto.UserClientDto;
 import com.electro.review.entity.Review;
 import com.electro.review.entity.ReviewImage;
-import com.electro.review.exception.BadRequestException;
 import com.electro.review.exception.ResourceNotFoundException;
 import com.electro.review.repository.ReviewRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -106,9 +106,14 @@ public class ReviewService {
 
         if (request.getVariantId() != null) {
             try {
+                //Cố Gắng gọi Catalog Service để xác thực Variant ID
                 catalogClient.getVariantById(request.getVariantId());
                 review.setVariantId(request.getVariantId());
             } catch (Exception ignored) {
+                        // FALLBACK LOGIC: 
+        // Nếu Catalog-Service sập, ném Exception, ta CỐ TÌNH BỎ QUA (ignored).
+        // Chấp nhận lưu Review mà không có VariantId tạm thời, 
+        // để không làm gián đoạn luồng trải nghiệm đăng bài của khách hàng!
             }
         }
 

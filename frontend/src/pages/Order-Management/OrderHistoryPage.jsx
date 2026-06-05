@@ -38,7 +38,10 @@ import {
 } from "../../services/orderService";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
 import PaymentIcon from "@mui/icons-material/Payment";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import TrackingTimeline from "../../components/TrackingTimeline/TrackingTimeline";
+import WarrantyClaimFromOrderDialog from "../../components/Warranty/WarrantyClaimFromOrderDialog";
+import { canRequestWarrantyForItem } from "../../utils/warrantyFromOrder";
 
 // ─── Tabs trạng thái ─────────────────────────────────────────────────────────
 const STATUS_TABS = [
@@ -118,6 +121,9 @@ const OrderList = () => {
 
   // Thanh toán lại
   const [retryLoading, setRetryLoading] = useState(false);
+
+  // Yêu cầu bảo hành từ dòng sản phẩm
+  const [claimDialog, setClaimDialog] = useState({ open: false, context: null });
 
   // ─── Fetch danh sách đơn hàng ───
   const fetchOrders = useCallback(async () => {
@@ -448,10 +454,10 @@ const OrderList = () => {
                                       <Button 
                                         size="small" 
                                         sx={{ minWidth: "auto", px: 1, py: 0.2, fontSize: "0.7rem", borderRadius: 1 }} 
-                                        variant="contained"
+                                        variant="outlined"
                                         onClick={() => window.open(`/warranty-check?code=${imei}`, '_blank')}
                                       >
-                                        🔍 Tra cứu bảo hành
+                                        🔍 Tra cứu BH
                                       </Button>
                                     </Box>
                                   ))}
@@ -459,9 +465,40 @@ const OrderList = () => {
                               )}
                             </Box>
                           </Box>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {formatMoney(item.totalPrice)}
-                          </Typography>
+                          <Box sx={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {formatMoney(item.totalPrice)}
+                            </Typography>
+                            {canRequestWarrantyForItem(orderDetail.status, item.assignedImeis) && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="warning"
+                                startIcon={<BuildOutlinedIcon />}
+                                sx={{ textTransform: "none", fontWeight: 600, borderRadius: 2, whiteSpace: "nowrap" }}
+                                onClick={() =>
+                                  setClaimDialog({
+                                    open: true,
+                                    context: {
+                                      orderId: orderDetail.id,
+                                      orderDetailId: item.id,
+                                      orderCode: orderDetail.orderCode,
+                                      productName: item.productName,
+                                      imei: item.assignedImeis[0],
+                                    },
+                                  })
+                                }
+                              >
+                                Yêu cầu BH / Sửa chữa
+                              </Button>
+                            )}
+                            {["DELIVERED", "COMPLETED", "SHIPPING"].includes(orderDetail.status) &&
+                              (!item.assignedImeis || item.assignedImeis.length === 0) && (
+                              <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 160 }}>
+                                Chưa có IMEI — bảo hành sau khi shop gán mã máy
+                              </Typography>
+                            )}
+                          </Box>
                         </Box>
                       ))}
 
@@ -715,6 +752,12 @@ const OrderList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <WarrantyClaimFromOrderDialog
+        open={claimDialog.open}
+        context={claimDialog.context}
+        onClose={() => setClaimDialog({ open: false, context: null })}
+      />
     </Box>
   );
 };

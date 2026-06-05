@@ -8,6 +8,7 @@ import {
   History as HistoryIcon,
   Inventory as InventoryIcon,
   SwapVert as SwapIcon,
+  Search as ConsultIcon,
 } from "@mui/icons-material";
 import {
   Box,
@@ -21,6 +22,8 @@ import {
   DialogTitle,
   IconButton,
   Paper,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -37,9 +40,15 @@ import {
   Tooltip,
 } from "@mui/material";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
+import SalesInventoryConsultationPanel from "../../components/Sales/SalesInventoryConsultationPanel";
+import { usePermissions } from "../../hooks/usePermissions";
 import { getLowStockStats, createStockImport, searchVariants, getInventoryTransactions } from "../../services/inventoryService";
 
 const InventoryManagementPage = () => {
+  const { hasPermission, isSalesUser } = usePermissions();
+  const canImportStock = hasPermission("STOCK_IMPORT");
+  const showSalesConsultation = isSalesUser && hasPermission("PRODUCT_VIEW");
+  const [activeTab, setActiveTab] = useState(showSalesConsultation ? 0 : 1);
   const [stats, setStats] = useState([]);
   const [threshold, setThreshold] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -97,7 +106,7 @@ const InventoryManagementPage = () => {
   }, [threshold]);
 
   useEffect(() => {
-    if (variantSearch.length < 2) {
+    if (!canImportStock || variantSearch.length < 2) {
       setVariantOptions([]);
       return;
     }
@@ -113,7 +122,7 @@ const InventoryManagementPage = () => {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [variantSearch]);
+  }, [variantSearch, canImportStock]);
 
   const handleImportSubmit = async () => {
     if (!importForm.supplier) {
@@ -186,27 +195,66 @@ const InventoryManagementPage = () => {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, flexWrap: "wrap", gap: 2 }}>
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom>
-              📦 Quản Lý Tồn Kho
+              {showSalesConsultation ? "📦 Tồn Kho & Tư Vấn" : "📦 Quản Lý Tồn Kho"}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Theo dõi và cảnh báo các mặt hàng sắp hết dựa trên ngưỡng thiết lập
+              {showSalesConsultation
+                ? "Tra cứu tồn khả dụng, tìm SP theo tên/SKU/IMEI — phục vụ tư vấn khách hàng"
+                : canImportStock
+                  ? "Theo dõi và cảnh báo các mặt hàng sắp hết dựa trên ngưỡng thiết lập"
+                  : "Chế độ chỉ xem — theo dõi cảnh báo tồn kho"}
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenImportModal(true)}
-            sx={{
-              bgcolor: "#ff9f1a",
-              "&:hover": { bgcolor: "#e68a00" },
-              px: 3, py: 1.2, borderRadius: "10px",
-              fontWeight: "bold", textTransform: "none", fontSize: "1rem",
-              boxShadow: "0 4px 12px rgba(255,159,26,0.3)",
-            }}
-          >
-            Lập Phiếu Nhập Kho
-          </Button>
+          {canImportStock && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenImportModal(true)}
+              sx={{
+                bgcolor: "#ff9f1a",
+                "&:hover": { bgcolor: "#e68a00" },
+                px: 3, py: 1.2, borderRadius: "10px",
+                fontWeight: "bold", textTransform: "none", fontSize: "1rem",
+                boxShadow: "0 4px 12px rgba(255,159,26,0.3)",
+              }}
+            >
+              Lập Phiếu Nhập Kho
+            </Button>
+          )}
         </Box>
+
+        {showSalesConsultation && (
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
+          >
+            <Tab
+              icon={<ConsultIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Tư vấn tồn kho"
+              sx={{ textTransform: "none", fontWeight: 700 }}
+            />
+            <Tab
+              icon={<WarningIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Cảnh báo & lịch sử"
+              sx={{ textTransform: "none", fontWeight: 700 }}
+            />
+          </Tabs>
+        )}
+
+        {showSalesConsultation && activeTab === 0 && (
+          <SalesInventoryConsultationPanel showIntro={false} />
+        )}
+
+        {(!showSalesConsultation || activeTab === 1) && (
+          <>
+        {!canImportStock && !showSalesConsultation && (
+          <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+            Bạn chỉ có quyền <strong>xem</strong> tồn kho. Nhập kho, cập nhật số lượng và quản lý IMEI thuộc Thủ kho / Admin.
+          </Alert>
+        )}
 
         {/* ═══ STAT CARDS — Gradient, matching other admin pages ═══ */}
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3, mb: 3 }}>
@@ -325,7 +373,8 @@ const InventoryManagementPage = () => {
                   <TableRow>
                     <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2, px: 3, width: 60 }}>STT</TableCell>
                     <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>SKU</TableCell>
-                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tên Mặt Hàng</TableCell>
+                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tên Sản Phẩm</TableCell>
+                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tên Biến Thể</TableCell>
                     <TableCell align="center" sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tồn Kho</TableCell>
                     <TableCell align="center" sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Trạng Thái</TableCell>
                   </TableRow>
@@ -333,7 +382,7 @@ const InventoryManagementPage = () => {
                 <TableBody>
                   {stats.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} align="center" sx={{ py: 8, border: 0 }}>
+                      <TableCell colSpan={6} align="center" sx={{ py: 8, border: 0 }}>
                         <InventoryIcon sx={{ fontSize: 56, color: "#cbd5e0", mb: 1 }} />
                         <Typography variant="h6" fontWeight="700" color="text.secondary">Tất cả mặt hàng đều an toàn</Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Không có mặt hàng nào dưới ngưỡng {threshold}</Typography>
@@ -350,7 +399,14 @@ const InventoryManagementPage = () => {
                             sx={{ fontWeight: 600, bgcolor: "#f1f5f9", color: "#64748b", fontFamily: "monospace", fontSize: "0.75rem" }} />
                         </TableCell>
                         <TableCell sx={{ py: 2 }}>
-                          <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{item.variantName}</Typography>
+                          <Typography variant="subtitle2" fontWeight="700" color="#1e293b">
+                            {item.productName || "—"}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ py: 2 }}>
+                          <Typography variant="body2" fontWeight="600" color="#475569">
+                            {item.variantName || "—"}
+                          </Typography>
                         </TableCell>
                         <TableCell align="center" sx={{ py: 2 }}>
                           <Typography fontWeight="bold" color={item.stockQuantity === 0 ? "#ef4444" : "#f59e0b"} variant="h6">
@@ -400,7 +456,9 @@ const InventoryManagementPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2, px: 3, width: 80 }}>#ID</TableCell>
-                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Mặt Hàng</TableCell>
+                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tên Sản Phẩm</TableCell>
+                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Tên Biến Thể</TableCell>
+                    <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2, width: 110 }}>SKU</TableCell>
                     <TableCell align="center" sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2, width: 120 }}>Loại</TableCell>
                     <TableCell align="center" sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2, width: 100 }}>Số lượng</TableCell>
                     <TableCell sx={{ bgcolor: "#f8fafc", fontWeight: "bold", color: "#64748b", py: 2 }}>Lý do</TableCell>
@@ -411,7 +469,7 @@ const InventoryManagementPage = () => {
                 <TableBody>
                   {transactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 6, border: 0 }}>
+                      <TableCell colSpan={9} align="center" sx={{ py: 6, border: 0 }}>
                         <HistoryIcon sx={{ fontSize: 48, color: "#cbd5e0", mb: 1 }} />
                         <Typography variant="body1" fontWeight="700" color="text.secondary">Chưa có lịch sử biến động nào</Typography>
                       </TableCell>
@@ -425,7 +483,19 @@ const InventoryManagementPage = () => {
                             <Typography variant="caption" fontWeight="700" color="#94a3b8" sx={{ fontFamily: "monospace" }}>#{tr.id}</Typography>
                           </TableCell>
                           <TableCell sx={{ py: 1.5 }}>
-                            <Typography variant="body2" fontWeight="700" color="#1e293b">{tr.variantName}</Typography>
+                            <Typography variant="body2" fontWeight="700" color="#1e293b">
+                              {tr.productName || "—"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5 }}>
+                            <Typography variant="body2" fontWeight="600" color="#475569">
+                              {tr.variantName || "—"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5 }}>
+                            <Typography variant="caption" sx={{ fontFamily: "monospace", color: "#64748b" }}>
+                              {tr.skuCode || "—"}
+                            </Typography>
                           </TableCell>
                           <TableCell align="center" sx={{ py: 1.5 }}>
                             <Chip label={txChip.label} size="small"
@@ -569,6 +639,8 @@ const InventoryManagementPage = () => {
           anchorOrigin={{ vertical: "top", horizontal: "right" }}>
           <Alert severity={toast.severity} variant="filled" sx={{ borderRadius: 2 }}>{toast.message}</Alert>
         </Snackbar>
+          </>
+        )}
       </Box>
     </AdminLayout>
   );

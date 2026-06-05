@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('USER_MANAGE', 'CUSTOMER_VIEW', 'ROLE_ADMIN', 'ADMIN')")
+@PreAuthorize("hasAnyAuthority('USER_MANAGE', 'CUSTOMER_VIEW', 'ROLE_ADMIN', 'ADMIN', 'ROLE_SALES', 'SALES')")
 public class AdminUserController {
 
     private final UserService userService;
@@ -27,11 +27,12 @@ public class AdminUserController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
         Sort sort = Sort.by("desc".equalsIgnoreCase(sortDir) ? Sort.Direction.DESC : Sort.Direction.ASC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
-        Page<UserDto.Response> users = userService.getAllUsersForAdmin(keyword, pageable);
+        Page<UserDto.Response> users = userService.getAllUsersForAdmin(keyword, role, pageable);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách người dùng thành công", users));
     }
 
@@ -41,6 +42,7 @@ public class AdminUserController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'ROLE_ADMIN', 'ADMIN')")
     public ResponseEntity<ApiResponse<UserDto.Response>> createUser(
             @Valid @RequestBody UserDto.CreateRequest request) {
         UserDto.Response created = userService.createUser(request);
@@ -49,6 +51,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'ROLE_ADMIN', 'ADMIN')")
     public ResponseEntity<ApiResponse<UserDto.Response>> updateUser(
             @PathVariable Integer id,
             @Valid @RequestBody UserDto.UpdateRequest request) {
@@ -57,6 +60,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'ROLE_ADMIN', 'ADMIN')")
     public ResponseEntity<ApiResponse<UserDto.Response>> toggleUserStatus(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái tài khoản thành công",
                 userService.toggleStatus(id)));

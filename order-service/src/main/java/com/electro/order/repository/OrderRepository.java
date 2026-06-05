@@ -28,7 +28,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     @Query("SELECT COUNT(o) FROM Order o WHERE o.isHidden = true")
     Long countHiddenOrders();
 
-    @Query("SELECT o FROM Order o WHERE o.userId = :userId")
+    @Query("SELECT o FROM Order o WHERE o.userId = :userId AND o.isHidden = false ORDER BY o.orderDate DESC")
     Page<Order> findByUserId(@Param("userId") Integer userId, Pageable pageable);
 
     @Query("SELECT o FROM Order o WHERE o.status = :status AND o.isHidden = false")
@@ -154,4 +154,29 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
            "WHERE o.status <> :excludedStatus " +
            "GROUP BY o.paymentMethod ORDER BY COUNT(o) DESC")
     List<Object[]> getPaymentMethodStats(@Param("excludedStatus") Order.OrderStatus excludedStatus);
+
+    @Query("SELECT o FROM Order o WHERE o.assignedSalesUserId = :salesId "
+            + "AND o.orderDate BETWEEN :start AND :end")
+    List<Order> findByAssignedSalesUserIdAndOrderDateBetween(
+            @Param("salesId") Integer salesId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    @Query("SELECT o FROM Order o WHERE o.isHidden = false AND o.assignedSalesUserId = :salesId "
+            + "ORDER BY o.orderDate DESC")
+    List<Order> findByAssignedSalesUserIdAndIsHiddenFalseOrderByOrderDateDesc(@Param("salesId") Integer salesId);
+
+    @Query("SELECT o FROM Order o WHERE o.isHidden = false AND o.assignedSalesUserId IS NOT NULL "
+            + "ORDER BY o.orderDate DESC")
+    List<Order> findByIsHiddenFalseAndAssignedSalesUserIdIsNotNullOrderByOrderDateDesc();
+
+    @Query("SELECT o FROM Order o WHERE o.isHidden = false "
+            + "AND (:assignedSalesUserId IS NULL OR o.assignedSalesUserId = :assignedSalesUserId) "
+            + "AND (:status IS NULL OR o.status = :status) "
+            + "AND (:keyword IS NULL OR :keyword = '' OR o.orderCode LIKE CONCAT('%', :keyword, '%'))")
+    Page<Order> adminFilterOrders(
+            @Param("assignedSalesUserId") Integer assignedSalesUserId,
+            @Param("status") Order.OrderStatus status,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 }

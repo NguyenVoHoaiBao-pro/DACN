@@ -1,86 +1,127 @@
 import { useSelector } from "react-redux";
 import { selectUser } from "../redux/appSlice";
 
+const SALES_DEFAULTS = [
+    "PRODUCT_VIEW", "INVENTORY_STAT", "ORDER_VIEW_ALL", "ORDER_CONFIRM", "ORDER_CANCEL",
+    "USER_PROFILE_UPDATE", "USER_ORDER_HISTORY", "USER_WARRANTY_LOOKUP", "WARRANTY_MANAGE",
+    "ORDER_CREATE", "CUSTOMER_VIEW", "REPORT_SALES", "ORDER_EDIT_DELIVERY",
+];
+
+const WAREHOUSE_DEFAULTS = [
+    "PRODUCT_VIEW", "STOCK_IMPORT", "IMEI_MANAGE", "INVENTORY_STAT", "ORDER_VIEW_ALL",
+    "ORDER_ASSIGN_SHIPPING", "ORDER_TRACKING_UPDATE", "ORDER_CANCEL", "STOCK_RETURN",
+];
+
+const ADMIN_DEFAULTS = [
+    "PRODUCT_VIEW", "PRODUCT_CREATE", "PRODUCT_UPDATE", "STOCK_IMPORT", "IMEI_MANAGE",
+    "INVENTORY_STAT", "ORDER_VIEW_ALL", "ORDER_CONFIRM", "ORDER_CANCEL", "ORDER_ASSIGN_SHIPPING",
+    "ORDER_TRACKING_UPDATE", "ORDER_EDIT_DELIVERY", "USER_PROFILE_UPDATE", "USER_ORDER_HISTORY", "USER_WARRANTY_LOOKUP",
+    "USER_MANAGE", "ROLE_PERM_EDIT", "REPORT_REVENUE", "STOCK_RETURN", "ORDER_CREATE",
+    "CUSTOMER_VIEW", "REPORT_SALES", "CATEGORY_VIEW", "BANNER_MANAGE", "POST_MANAGE", "WARRANTY_MANAGE",
+    "PRODUCT_MANAGE",
+];
+
+const normalizeRoleName = (name) => (name || "").replace(/^ROLE_/i, "").trim().toUpperCase();
+
+const getRoleNames = (user) => {
+    if (!user) return [];
+    if (Array.isArray(user.roles)) {
+        return user.roles
+            .map((r) => normalizeRoleName(typeof r === "string" ? r : r?.name))
+            .filter(Boolean);
+    }
+    if (user.role?.name) {
+        return [normalizeRoleName(user.role.name)];
+    }
+    if (Array.isArray(user.permissions) && user.permissions.includes("USER_MANAGE")) {
+        return ["ADMIN"];
+    }
+    return [];
+};
+
+const isAdminFromPermissions = (perms) =>
+    perms.includes("USER_MANAGE") || perms.includes("REPORT_REVENUE") || perms.includes("ROLE_PERM_EDIT");
+
 /**
- * Hook tùy chỉnh để quản lý logic phân quyền (RBAC) trên phía Frontend.
- * Hàm này lấy thông tin user từ Redux, giải mã tất cả các quyền (permissions)
- * mà user có từ danh sách roles, và cung cấp các hàm tiện ích kiểm tra.
+ * SALES / WAREHOUSE: whitelist only (khớp RolePermissionDefaults.java).
+ * ADMIN: full admin set (+ quyền từ DB nếu có trên role khác).
  */
-export const usePermissions = () => {
-    const user = useSelector(selectUser);
+const buildPermissionSet = (user) => {
+    if (!user) return [];
+    const loginPermsEarly = Array.isArray(user.permissions)
+        ? user.permissions.map((p) => (typeof p === "string" ? p : p?.code || p?.name)).filter(Boolean)
+        : [];
+    if (!user.roles && !user.role && loginPermsEarly.length === 0) return [];
 
-    // Gộp tất cả các permissions từ các roles của user lại thành 1 mảng phẳng (flat array)
-    // Loại bỏ các quyền trùng lặp bằng cách dùng Set
-    const allPermissions = (() => {
-        if (!user || (!user.roles && !user.role)) return [];
+    const roleNames = getRoleNames(user);
+    const loginPerms = Array.isArray(user.permissions)
+        ? user.permissions.map((p) => (typeof p === "string" ? p : p?.code || p?.name)).filter(Boolean)
+        : [];
+    const isAdmin =
+        roleNames.includes("ADMIN") || isAdminFromPermissions(loginPerms);
+    const isSales = roleNames.includes("SALES") && !isAdmin;
+    const isWarehouse = roleNames.includes("WAREHOUSE") && !isAdmin;
 
-        let perms = [];
-
-        // Nếu API trả về mảng roles (Set<RoleDto>)
+    if (isAdmin) {
+        const fromDb = new Set(ADMIN_DEFAULTS);
         if (Array.isArray(user.roles)) {
             user.roles.forEach((role) => {
-                if (Array.isArray(role.permissions)) {
-                    // Lấy mã quyền (nếu API backend trả mảng string hoặc mảng Object)
-                    role.permissions.forEach(p => perms.push(typeof p === 'string' ? p : p.code || p.name));
+                const roleName = typeof role === "string" ? role : role?.name;
+                if (normalizeRoleName(roleName) === "ADMIN" && Array.isArray(role.permissions)) {
+                    role.permissions.forEach((p) => {
+                        const code = typeof p === "string" ? p : p.code || p.name;
+                        if (code) fromDb.add(code);
+                    });
                 }
             });
-        } else if (user.role && Array.isArray(user.role.permissions)) {
-            // Logic dự phòng nếu chỉ có 1 role object
-            user.role.permissions.forEach(p => perms.push(typeof p === 'string' ? p : p.code || p.name));
         }
+        return [...fromDb];
+    }
 
-        // Tạm thời fix cứng cho các Vai trò nếu hệ thống Backend chưa gửi permission list
-        const isAdmin = user?.roles?.some(r => r.name === "ROLE_ADMIN" || r.name === "ADMIN") || user?.role?.name === "ROLE_ADMIN" || user?.role?.name === "ADMIN";
-        const isWarehouse = user?.roles?.some(r => r.name === "WAREHOUSE") || user?.role?.name === "WAREHOUSE";
-        const isSales = user?.roles?.some(r => r.name === "SALES") || user?.role?.name === "SALES";
+    const perms = new Set();
+    if (isSales) SALES_DEFAULTS.forEach((p) => perms.add(p));
+    if (isWarehouse) WAREHOUSE_DEFAULTS.forEach((p) => perms.add(p));
 
-        if (perms.length === 0 || isAdmin) {
-
-            if (isAdmin) {
-                // Admin: Full Quyền Hệ thống
-                perms = [
-                    "PRODUCT_VIEW", "PRODUCT_CREATE", "PRODUCT_UPDATE", "STOCK_IMPORT", "IMEI_MANAGE",
-                    "INVENTORY_STAT", "ORDER_VIEW_ALL", "ORDER_CONFIRM", "ORDER_CANCEL", "ORDER_ASSIGN_SHIPPING",
-                    "ORDER_TRACKING_UPDATE", "USER_PROFILE_UPDATE", "USER_ORDER_HISTORY", "USER_WARRANTY_LOOKUP",
-                    "USER_MANAGE", "ROLE_PERM_EDIT", "REPORT_REVENUE", "STOCK_RETURN", "ORDER_CREATE",
-                    "CUSTOMER_VIEW", "REPORT_SALES", "CATEGORY_VIEW", "BANNER_MANAGE", "POST_MANAGE", "WARRANTY_MANAGE",
-                    "PRODUCT_MANAGE"
-                ];
-
-            } else if (isWarehouse) {
-                // Thủ kho: Chuyên nhập xuất hàng, gạch bỏ các quyền sửa xóa SP và đơn hàng
-                perms = [
-                    "PRODUCT_VIEW", "STOCK_IMPORT", "IMEI_MANAGE", "INVENTORY_STAT", "ORDER_VIEW_ALL",
-                    "ORDER_ASSIGN_SHIPPING", "ORDER_TRACKING_UPDATE", "STOCK_RETURN"
-                ];
-            } else if (isSales) {
-                // Nhân viên Sale: Dịch vụ khách hàng, Không rớ vào tồn kho hệ thống hoặc kho bãi
-                perms = [
-                    "PRODUCT_VIEW", "ORDER_VIEW_ALL", "ORDER_CONFIRM", "ORDER_CANCEL", "USER_PROFILE_UPDATE",
-                    "USER_ORDER_HISTORY", "USER_WARRANTY_LOOKUP", "WARRANTY_MANAGE", "ORDER_CREATE", "CUSTOMER_VIEW", "REPORT_SALES"
-                ];
+    if (perms.size === 0 && Array.isArray(user.roles)) {
+        user.roles.forEach((role) => {
+            if (Array.isArray(role.permissions)) {
+                role.permissions.forEach((p) => {
+                    const code = typeof p === "string" ? p : p.code || p.name;
+                    if (code) perms.add(code);
+                });
             }
-        }
+        });
+    }
 
-        return [...new Set(perms)]; // Trả về mảng các phân quyền duy nhất
-    })();
+    return [...perms];
+};
 
-    const hasPermission = (permissionCode) => {
-        return allPermissions.includes(permissionCode);
-    };
+export const usePermissions = () => {
+    const user = useSelector(selectUser);
+    const allPermissions = buildPermissionSet(user);
+    const roleNames = getRoleNames(user);
+    const isAdminUser =
+        roleNames.includes("ADMIN") || isAdminFromPermissions(allPermissions);
 
-    const hasAnyPermission = (permissionCodes) => {
-        return permissionCodes.some(code => allPermissions.includes(code));
-    };
+    const hasPermission = (permissionCode) => allPermissions.includes(permissionCode);
 
-    const hasAllPermissions = (permissionCodes) => {
-        return permissionCodes.every(code => allPermissions.includes(code));
-    };
+    const hasAnyPermission = (permissionCodes) =>
+        permissionCodes.some((code) => allPermissions.includes(code));
+
+    const hasAllPermissions = (permissionCodes) =>
+        permissionCodes.every((code) => allPermissions.includes(code));
+
+    const hasRole = (roleName) => roleNames.includes(normalizeRoleName(roleName));
 
     return {
         permissions: allPermissions,
+        roleNames,
+        hasRole,
         hasPermission,
         hasAnyPermission,
-        hasAllPermissions
+        hasAllPermissions,
+        isAdminUser,
+        isSalesUser: roleNames.includes("SALES") && !isAdminUser,
+        isWarehouseUser: roleNames.includes("WAREHOUSE") && !isAdminUser,
     };
 };

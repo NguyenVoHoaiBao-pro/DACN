@@ -51,11 +51,22 @@ public class UserService {
     }
 
     public Page<UserDto.Response> getAllUsersForAdmin(String keyword, Pageable pageable) {
+        return getAllUsersForAdmin(keyword, null, pageable);
+    }
+
+    /** keyword + roleFilter: null = all users, "CUSTOMER" = khách hàng only */
+    public Page<UserDto.Response> getAllUsersForAdmin(String keyword, String roleFilter, Pageable pageable) {
         Page<User> usersPage;
+        boolean customersOnly = "CUSTOMER".equalsIgnoreCase(roleFilter);
         if (keyword != null && !keyword.trim().isEmpty()) {
-            usersPage = userRepository.searchUsers(keyword.trim(), pageable);
+            String kw = keyword.trim();
+            usersPage = customersOnly
+                    ? userRepository.searchCustomers(kw, pageable)
+                    : userRepository.searchUsers(kw, pageable);
         } else {
-            usersPage = userRepository.findAll(pageable);
+            usersPage = customersOnly
+                    ? userRepository.findAllCustomers(pageable)
+                    : userRepository.findAll(pageable);
         }
         return usersPage.map(user -> modelMapper.map(user, UserDto.Response.class));
     }
@@ -70,6 +81,12 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "username", username));
         return modelMapper.map(user, UserDto.Response.class);
+    }
+
+    public User getUserEntityByUsername(String usernameOrEmail) {
+        String key = usernameOrEmail != null ? usernameOrEmail.trim() : "";
+        return userRepository.findByUsernameOrEmail(key, key)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "username", usernameOrEmail));
     }
 
     public UserDto.Response createUser(UserDto.CreateRequest request) {
@@ -231,14 +248,7 @@ public class UserService {
         }
         Set<String> codes = new LinkedHashSet<>();
         for (Role role : user.getRoles()) {
-            if (role.getPermissions() == null) {
-                continue;
-            }
-            for (Permission permission : role.getPermissions()) {
-                if (permission.getCode() != null && !permission.getCode().isBlank()) {
-                    codes.add(permission.getCode());
-                }
-            }
+            codes.addAll(com.electro.user.security.RolePermissionDefaults.resolvePermissionsForRole(role));
         }
         return new ArrayList<>(codes);
     }

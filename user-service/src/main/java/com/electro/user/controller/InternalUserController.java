@@ -1,23 +1,30 @@
 package com.electro.user.controller;
 
-import com.electro.user.dto.GoogleLoginRequest;
-import com.electro.user.dto.UserDto;
-import com.electro.user.entity.User;
-import com.electro.user.exception.BadRequestException;
-import com.electro.user.exception.ResourceNotFoundException;
-import com.electro.user.repository.UserRepository;
-import com.electro.user.repository.AddressRepository;
-import com.electro.user.entity.UserAddress;
-import com.electro.user.service.UserService;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
-import jakarta.validation.Valid;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.electro.user.dto.GoogleLoginRequest;
+import com.electro.user.dto.UserDto;
+import com.electro.user.entity.User;
+import com.electro.user.entity.UserAddress;
+import com.electro.user.exception.BadRequestException;
+import com.electro.user.exception.ResourceNotFoundException;
+import com.electro.user.repository.AddressRepository;
+import com.electro.user.repository.UserRepository;
+import com.electro.user.service.UserService;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/internal/users")
@@ -52,10 +59,12 @@ public class InternalUserController {
             response.put("success", false);
             return response;
         }
-
+        // Dòng 56: Móc thông tin User từ Database lên (bằng Email hoặc Username)
         User user = userRepository.findByUsernameOrEmail(usernameOrEmail.trim(), usernameOrEmail.trim())
                 .orElse(null);
+        // Dòng 58: So sánh Mật khẩu User nhập vào với Mật khẩu băm (Bcrypt) trong DB
         if (user != null && passwordEncoder.matches(password, user.getPassword())) {
+     // ĐÚNG MẬT KHẨU! Gói ghém user_id và roles trả ngược về cho Auth Service
             return userService.buildAuthSuccessPayload(user);
         }
 

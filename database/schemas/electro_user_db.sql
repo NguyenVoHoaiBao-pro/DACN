@@ -67,7 +67,8 @@ INSERT INTO `permissions` (`id`, `code`, `name`, `description`, `created_at`) VA
 (21, 'AI_MODEL_TRAIN', 'Huấn luyện AI', 'Cấu hình và cập nhật dữ liệu cho thuật toán gợi ý.', '2026-03-07 08:11:53'),
 (22, 'WARRANTY_MANAGE', 'Quản lý bảo hành', 'Tiếp nhận, xử lý và cập nhật trạng thái bảo hành thiết bị.', '2026-03-08 10:00:00'),
 (23, 'REPORT_SALES', 'Báo cáo bán hàng', 'Thống kê đơn hàng và sản phẩm', '2026-03-08 18:08:14'),
-(24, 'PRODUCT_MANAGE', 'Quản lý Sản phẩm', 'Quyền được xem, sửa, xoá và cập nhật Sản phẩm', '2026-03-09 19:47:42');
+(24, 'PRODUCT_MANAGE', 'Quản lý Sản phẩm', 'Quyền được xem, sửa, xoá và cập nhật Sản phẩm', '2026-03-09 19:47:42'),
+(25, 'CUSTOMER_VIEW', 'Xem khách hàng', 'Xem hồ sơ khách hàng, lịch sử mua (read-only).', '2026-03-07 08:11:53');
 
 ALTER TABLE `permissions`
   ADD UNIQUE KEY `code` (`code`);
@@ -141,6 +142,7 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 (2, 5),
 (1, 6),
 (2, 6),
+(3, 6),
 (1, 7),
 (2, 7),
 (3, 7),
@@ -175,6 +177,7 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 (3, 22),
 (1, 23),
 (3, 23),
+(3, 25),
 (1, 24);
 
 ALTER TABLE `role_permissions`

@@ -1,0 +1,172 @@
+{
+  "info": {
+    "_postman_id": "78f83c93-0fcc-499d-a33c-dc9b9348b511",
+    "name": "🛍️ Electro Store - AI Recommendations API",
+    "description": "Bộ sưu tập Postman v2.1 đầy đủ Kịch bản Kiểm thử Edge Cases cho Microservice gợi ý SVD.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "📋 1. Xem trạng thái Model",
+      "item": [
+        {
+          "name": "Trạng thái Model",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/model-status",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "model-status"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💡 2. Gợi ý (Recommendations Tests)",
+      "item": [
+        {
+          "name": "Khách hàng bình thường (SVD)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/recommend?user_id=1114&top_n=5",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "recommend"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "1114"
+                },
+                {
+                  "key": "top_n",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Trích xuất Recommendation qua giải thuật phân rã SVD."
+          },
+          "response": []
+        },
+        {
+          "name": "Khách hàng Mới / Ẩn danh (Cold Start)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/recommend?user_id=999999&top_n=5",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "recommend"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "999999",
+                  "description": "Một User không tồn tại trong DB mẫu"
+                },
+                {
+                  "key": "top_n",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Lỗi Cold Start: Hệ thống sẽ tự động chuyển hướng trả về Popularity các mặt hàng bán chạy nhất."
+          },
+          "response": []
+        },
+        {
+          "name": "Lỗi: Không truyền User ID (400 Bad Request)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/recommend?top_n=5",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "recommend"
+              ],
+              "query": [
+                {
+                  "key": "top_n",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Thiếu user_id. Server phải phản hồi lỗi 400."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🚀 3. Huấn luyện (Retrain Tests)",
+      "item": [
+        {
+          "name": "Kích hoạt Retrain",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/retrain",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "retrain"
+              ]
+            },
+            "description": "Thực hiện Update trọng số SVD Cache mượt mà."
+          },
+          "response": []
+        },
+        {
+          "name": "Lỗi: Bấm Retrain 2 Lần liên tiếp (409 Conflict)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/retrain",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "retrain"
+              ]
+            },
+            "description": "Nếu luồng cũ chưa hoàn thành. Trả về mã 409 từ chối."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "ai_base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ]
+}

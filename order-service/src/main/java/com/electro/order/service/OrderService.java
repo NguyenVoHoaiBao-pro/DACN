@@ -1,19 +1,13 @@
 package com.electro.order.service;
 
-import com.electro.order.dto.GHNDto;
-import com.electro.order.dto.OrderDto;
-import com.electro.order.dto.PaymentDto;
-import com.electro.order.entity.*;
-import com.electro.order.client.UserAddressDto;
-import com.electro.order.client.UserClient;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
-import com.electro.order.exception.BadRequestException;
-import com.electro.order.exception.ResourceNotFoundException;
-import com.electro.order.repository.*;
-import com.electro.order.client.CatalogClient;
-import com.electro.order.client.CartClient;
-import com.electro.order.dto.CatalogClientDto;
-import com.electro.order.service.payment.PaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -22,15 +16,24 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import com.electro.order.client.CatalogClient;
+import com.electro.order.dto.CatalogClientDto;
+import com.electro.order.dto.GHNDto;
+import com.electro.order.dto.OrderDto;
+import com.electro.order.dto.PaymentDto;
+import com.electro.order.entity.Coupon;
+import com.electro.order.entity.Order;
+import com.electro.order.entity.OrderDetail;
+import com.electro.order.entity.OrderItem;
+import com.electro.order.exception.BadRequestException;
+import com.electro.order.exception.ResourceNotFoundException;
+import com.electro.order.security.OrderSecurityHelper;
+import com.electro.order.security.SalesOrderEditPolicy;
+import com.electro.order.repository.CouponRepository;
+import com.electro.order.repository.OrderDetailRepository;
+import com.electro.order.repository.OrderItemRepository;
+import com.electro.order.repository.OrderRepository;
+import com.electro.order.service.payment.PaymentService;
 
 @Service
 @Transactional
@@ -40,6 +43,9 @@ public class OrderService {
 
     @Autowired
     private com.electro.order.client.UserClient userClient;
+
+    @Autowired
+    private SalesAssignmentService salesAssignmentService;
 
     @Autowired
     private com.electro.order.client.CartClient cartClient;
@@ -81,11 +87,13 @@ public class OrderService {
         com.electro.order.dto.UserDto.Response user = findUser(username);
 
         // 1. Lấy giỏ hàng
+        //Dòng 84 : Gọi Feign Client Sang Cart Service
         com.electro.order.dto.CartDto.CartResponse cart = cartClient.getCartByUserId(user.getId());
+        //Dòng 85-87 : kiểm tra giỏ hàng rỗng
         if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new BadRequestException("Giỏ hàng trống, vui lòng thêm sản phẩm trước khi đặt hàng");
         }
-        var items = cart.getItems();
+        var items = cart.getItems(); // lấy danh sách sản phẩm
 
         // 2. Kiểm tra tồn kho
         for (var item : items) {
@@ -102,10 +110,13 @@ public class OrderService {
         String shippingName, shippingPhone, shippingAddress, shippingProvince, shippingDistrict, shippingWard;
         Integer savedAddressId = null;
 
+        //Nếu user truyền lên AddressID 
         if (request.getAddressId() != null) {
+            //Lấy địa chỉ giao hàng từ User Service ,dùng Feign Client để đồng bộ
             com.electro.order.client.UserAddressDto dto = userClient.getAddressById(request.getAddressId());
             if (dto == null) throw new ResourceNotFoundException("UserAddress", "id", request.getAddressId());
             savedAddressId = dto.getId();
+            //gán các thông tin trả về
             shippingName = dto.getReceiverName();
             shippingPhone = dto.getReceiverPhone();
             shippingAddress = dto.getAddress();
@@ -143,7 +154,10 @@ public class OrderService {
         // 5. Tính subtotal
         BigDecimal subtotal = BigDecimal.ZERO;
         for (var item : items) {
-            BigDecimal price = item.getUnitPrice() != null ? BigDecimal.valueOf(item.getUnitPrice()) : BigDecimal.valueOf(item.getVariant().getPrice());
+            // BẢN VÁ LỖI (FIX): Ép buộc lấy giá MỚI NHẤT từ Catalog (Variant) để chốt bill, không tin tưởng giá cũ của Cart
+            BigDecimal price = (item.getVariant() != null && item.getVariant().getPrice() != null)
+                    ? BigDecimal.valueOf(item.getVariant().getPrice())
+                    : (item.getUnitPrice() != null ? BigDecimal.valueOf(item.getUnitPrice()) : BigDecimal.ZERO);
             subtotal = subtotal.add(price.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
@@ -152,6 +166,7 @@ public class OrderService {
         Coupon coupon = null;
         String couponCodeApplied = null;
 
+        //Móc Coupon từ Database lên
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
             String code = request.getCouponCode().trim().toUpperCase();
             coupon = couponRepository.findActiveCouponByCode(code, LocalDateTime.now())
@@ -185,6 +200,7 @@ public class OrderService {
         }
 
         // 7. Phí vận chuyển — tính động từ GHN nếu có địa chỉ GHN
+        //Tự Động Tính Chi Phí Vận Chuyển GHN (dùng Feign Client)
         BigDecimal shippingFee = ghnService.calculateShippingFeeForOrder(
                 request.getToDistrictId(),
                 request.getToWardCode(),
@@ -197,7 +213,7 @@ public class OrderService {
         // 9. Sinh mã đơn hàng
         String orderCode = "ORD-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
 
-        // 10. Tạo Order
+        // 10. Tạo Order : Tạo Đối tượng đơn hàng và lưu vào db
         Order order = new Order();
         order.setOrderCode(orderCode);
         order.setUserId(user.getId());
@@ -225,6 +241,7 @@ public class OrderService {
         }
 
         Order savedOrder = orderRepository.save(order);
+        salesAssignmentService.assignOnNewOrder(savedOrder, request.getSalesRef());
 
         // 11. Tạo OrderDetail cho mỗi CartItem
         List<OrderDetail> orderDetails = new ArrayList<>();
@@ -249,6 +266,7 @@ public class OrderService {
         orderDetailRepository.saveAll(orderDetails);
 
         // 13. Cập nhật tồn kho (Trừ đi số lượng đã đặt; IMEI gán sau khi admin xuất kho)
+        //Trừ Tồn Kho Dùng Feign Client gọi Sang Catalog Service
         for (var cartItem : items) {
             catalogClient.updateStock(cartItem.getVariant().getId(), -cartItem.getQuantity());
         }
@@ -259,7 +277,7 @@ public class OrderService {
             couponRepository.save(coupon);
         }
 
-        // 14. Xóa giỏ hàng
+        // 14. Dùng Feign Client ra lệnh Cart Service Xóa giỏ hàng
         cartClient.clearCartByUserId(user.getId());
 
         // 💡 Tự động lưu phân mảnh PURCHASE interaction vào Analytics Insights
@@ -287,7 +305,7 @@ public class OrderService {
                 orderRepository.save(savedOrder);
             }
         }
-
+        //TRả về cục đơnh àng + Link thanh toán nếu có trả về cho phía Frontend
         return mapToOrderResponse(savedOrder, orderDetails);
     }
 
@@ -452,12 +470,22 @@ public class OrderService {
      * Admin xem tất cả đơn hàng — lọc theo status, tìm kiếm theo keyword
      */
     @Transactional(readOnly = true)
-    public Page<OrderDto.AdminOrderSummaryResponse> adminGetAllOrders(String status, String keyword, Pageable pageable) {
+    public Page<OrderDto.AdminOrderSummaryResponse> adminGetAllOrders(
+            String status, String keyword, Integer userId, Integer assignedSalesUserId, Pageable pageable) {
         Page<Order> orders;
 
-        if (keyword != null && !keyword.isBlank()) {
+        if (assignedSalesUserId != null) {
+            Order.OrderStatus orderStatus = (status != null && !status.isBlank()) ? parseStatus(status) : null;
+            String key = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+            orders = orderRepository.adminFilterOrders(assignedSalesUserId, orderStatus, key, pageable);
+        } else if (userId != null) {
+            orders = orderRepository.findByUserId(userId, pageable);
+            if (status != null && !status.isBlank()) {
+                Order.OrderStatus orderStatus = parseStatus(status);
+                orders = orderRepository.findByUserIdAndStatus(userId, orderStatus, pageable);
+            }
+        } else if (keyword != null && !keyword.isBlank()) {
             orders = orderRepository.searchOrders(keyword.trim(), pageable);
-            // Nếu có cả status thì lọc thêm
             if (status != null && !status.isBlank()) {
                 Order.OrderStatus orderStatus = parseStatus(status);
                 orders = orderRepository.searchOrdersByKeywordAndStatus(keyword.trim(), orderStatus, pageable);
@@ -498,6 +526,7 @@ public class OrderService {
 
         // Validate chuyển trạng thái hợp lệ
         validateStatusTransition(currentStatus, newStatus);
+        OrderSecurityHelper.assertCanUpdateOrderStatus(currentStatus, newStatus);
 
         // Xử lý logic theo trạng thái mới
         switch (newStatus) {
@@ -600,9 +629,57 @@ public class OrderService {
     }
 
     /**
+     * Cập nhật thông tin giao hàng & ghi chú — không thay đổi giá trị đơn.
+     * Sales: chỉ PENDING / CONFIRMED. Admin: mọi trạng thái (hỗ trợ đặc biệt).
+     */
+    public OrderDto.AdminOrderResponse adminUpdateDeliveryInfo(
+            Integer orderId, OrderDto.UpdateDeliveryInfoRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
+
+        if (!OrderSecurityHelper.hasFullOrderManageAccess()
+                && !SalesOrderEditPolicy.canEditDelivery(order.getStatus())) {
+            throw new BadRequestException(SalesOrderEditPolicy.lockMessage(order.getStatus()));
+        }
+
+        order.setShippingName(requireNonBlank(request.getShippingName(), "Tên người nhận"));
+        order.setShippingPhone(requireNonBlank(request.getShippingPhone(), "Số điện thoại nhận hàng"));
+        order.setShippingAddress(requireNonBlank(request.getShippingAddress(), "Địa chỉ giao hàng"));
+
+        if (request.getShippingProvince() != null) {
+            order.setShippingProvince(request.getShippingProvince().trim());
+        }
+        if (request.getShippingDistrict() != null) {
+            order.setShippingDistrict(request.getShippingDistrict().trim());
+        }
+        if (request.getShippingWard() != null) {
+            order.setShippingWard(request.getShippingWard().trim());
+        }
+        if (request.getNote() != null) {
+            order.setNote(request.getNote().trim());
+        }
+        if (request.getAdminNote() != null) {
+            order.setAdminNote(request.getAdminNote().trim());
+        }
+
+        orderRepository.save(order);
+        List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+        return mapToAdminOrderResponse(order, details);
+    }
+
+    private static String requireNonBlank(String value, String fieldLabel) {
+        if (value == null || value.isBlank()) {
+            throw new BadRequestException(fieldLabel + " không được để trống");
+        }
+        return value.trim();
+    }
+
+    /**
      * Admin cập nhật trạng thái thanh toán
      */
     public OrderDto.AdminOrderResponse adminUpdatePaymentStatus(Integer orderId, OrderDto.UpdatePaymentStatusRequest request) {
+        OrderSecurityHelper.assertCanUpdatePaymentStatus();
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
 
@@ -627,6 +704,8 @@ public class OrderService {
     public OrderDto.AdminOrderResponse adminCancelOrder(Integer orderId, OrderDto.CancelRequest request) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
+
+        OrderSecurityHelper.assertCanCancelOrder(order.getStatus());
 
         if (order.getStatus() == Order.OrderStatus.COMPLETED) {
             throw new BadRequestException("Không thể hủy đơn hàng đã hoàn thành. Hãy dùng trạng thái REFUNDED.");
@@ -676,6 +755,8 @@ public class OrderService {
      */
     public OrderDto.AdminOrderResponse adminToggleOrderVisibility(
             Integer orderId, OrderDto.UpdateVisibilityRequest request) {
+
+        OrderSecurityHelper.assertCanToggleVisibility();
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
@@ -777,6 +858,8 @@ public class OrderService {
      * - Lưu vào bảng order_item_serials.
      */
     public OrderDto.AdminOrderResponse assignImeiToOrder(Integer orderId, OrderDto.AssignImeiRequest request) {
+        OrderSecurityHelper.assertCanAssignImei();
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
 
@@ -990,6 +1073,18 @@ public class OrderService {
         s.setUserId(user.getId());
         s.setUsername(user.getUsername());
         s.setCustomerName(user.getName());
+        s.setAssignedSalesUserId(order.getAssignedSalesUserId());
+        if (order.getAssignedSalesUserId() != null) {
+            try {
+                com.electro.order.dto.UserDto.Response sales = userClient.getUserById(order.getAssignedSalesUserId());
+                s.setAssignedSalesName(sales.getName());
+            } catch (Exception ignored) {
+                // optional display name
+            }
+        }
+        s.setOrderSource(order.getOrderSource() != null ? order.getOrderSource().name() : "WEB_ORGANIC");
+        s.setSalesPipelineStatus(order.getSalesPipelineStatus() != null
+                ? order.getSalesPipelineStatus().name() : "NEW_ASSIGNED");
 
         List<OrderDetail> details = order.getOrderDetails();
         if (details != null && !details.isEmpty()) {

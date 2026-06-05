@@ -9,9 +9,10 @@
     min-height: 100vh;
     background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    padding: 40px 20px;
+    padding: 40px 20px 80px;
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 /* Animated background orbs */
@@ -50,6 +51,37 @@
     100% {
         transform: translate(30px, -40px) scale(1.1);
     }
+}
+
+/* ─── Back to home ─── */
+.warranty-back-home-wrap {
+    max-width: 620px;
+    margin: 0 auto 20px;
+    position: relative;
+    z-index: 2;
+}
+
+.warranty-back-home-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(12px);
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.warranty-back-home-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(196, 181, 253, 0.5);
+    transform: translateY(-1px);
+    color: #e9d5ff;
 }
 
 /* ─── Hero Section ─── */
@@ -489,6 +521,105 @@
     color: rgba(255, 255, 255, 0.3);
     font-size: 0.85rem;
     margin: 4px 0;
+}
+
+/* ─── Form gửi yêu cầu BH (khách đã đăng nhập) ─── */
+.warranty-claim-submit-wrap {
+    max-width: 620px;
+    margin: 32px auto 0;
+    position: relative;
+    z-index: 2;
+}
+
+.warranty-claim-submit {
+    color: #0f172a;
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 24px;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+}
+
+.warranty-claim-submit h3 {
+    color: #0f172a;
+    margin: 0 0 8px;
+}
+
+.warranty-claim-submit p {
+    color: #64748b;
+}
+
+.warranty-claim-submit label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #334155;
+    font-size: 0.9rem;
+}
+
+.warranty-claim-submit input,
+.warranty-claim-submit textarea,
+.warranty-claim-submit select {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+
+.warranty-claim-submit input::placeholder,
+.warranty-claim-submit textarea::placeholder {
+    color: #94a3b8;
+}
+
+.warranty-claim-submit input:focus,
+.warranty-claim-submit textarea:focus,
+.warranty-claim-submit select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    background: #fff;
+}
+
+.warranty-form-section-title {
+    margin: 18px 0 10px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #334155;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 6px;
+}
+
+.warranty-pickup-preview {
+    font-size: 13px;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: -4px 0 14px;
+}
+
+.warranty-claim-submit-login-hint {
+    max-width: 620px;
+    margin: 32px auto 0;
+    padding: 20px 24px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px dashed rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.85);
+    text-align: center;
+    position: relative;
+    z-index: 2;
+}
+
+.warranty-claim-submit-login-hint a {
+    color: #c4b5fd;
+    font-weight: 700;
+    text-decoration: underline;
 }
 
 /* ─── RESPONSIVE ─── */

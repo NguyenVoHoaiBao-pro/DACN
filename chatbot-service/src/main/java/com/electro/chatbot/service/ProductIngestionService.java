@@ -1,5 +1,17 @@
 package com.electro.chatbot.service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.springframework.ai.document.Document;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
 import com.electro.chatbot.client.CatalogClient;
 import com.electro.chatbot.client.ReviewClient;
 import com.electro.chatbot.config.RagProperties;
@@ -7,19 +19,9 @@ import com.electro.chatbot.dto.CustomPageResponse;
 import com.electro.chatbot.dto.ProductResponseDto;
 import com.electro.chatbot.dto.ReviewResponseDto;
 import com.electro.shared.dto.ApiResponse;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +74,7 @@ public class ProductIngestionService {
                         metadata.put("averageRating", product.getAverageRating() != null ? product.getAverageRating() : 0.0);
 
                         String docId = "product-" + product.getId();
+                        //Nhồi Văn Bản đó vào một đối tượng document(RAG Record)
                         Document doc = Document.builder()
                                 .id(docId)
                                 .text(aggregatedContent)
@@ -83,9 +86,12 @@ public class ProductIngestionService {
                         log.error("Lỗi khi xử lý dữ liệu cho sản phẩm ID {}: {}", product.getId(), e.getMessage());
                     }
                 }
-
+                
+                //Đem Bản Ghi đã được gom đủ thành 4 Bảng đem đi chunking
                 if (!rawDocuments.isEmpty()) {
+                    //Chunking 500 từ và gối đầu 100 từ 
                     TokenTextSplitter splitter = new TokenTextSplitter(500, 100, 5, 10000, true);
+                    //Áp dụng Kỹ Thuật Chunking chia nhỏ tài liệu đã được gom từ 4 Table Trên
                     List<Document> chunkedDocuments = assignChunkIds(splitter.apply(rawDocuments));
 
                     log.info("Đang nạp {} chunks cho {} sản phẩm trang {} (hybrid={})...",
@@ -95,6 +101,7 @@ public class ProductIngestionService {
                     if (ragProperties.getHybrid().isEnabled()) {
                         ragRetrievalService.upsertHybridChunks(chunkedDocuments);
                     } else {
+                        //Lưu các Khối Chunk Vào Cơ Sở Dữ Liệu Vector Store
                         vectorStore.add(chunkedDocuments);
                     }
                 }
@@ -128,12 +135,15 @@ public class ProductIngestionService {
 
     private String buildAggregatedProductContent(ProductResponseDto product) {
         StringBuilder sb = new StringBuilder();
+        //Bảng 1 : Product
         sb.append("Tên sản phẩm: ").append(product.getName()).append("\n");
         sb.append("Mã sản phẩm (ID): ").append(product.getId()).append("\n");
-
+        
+        //Bảng 2 : Thương Hiệu - Hãng Sản Xuất
         if (product.getProducer() != null) {
             sb.append("Thương hiệu (Hãng sản xuất): ").append(product.getProducer().getName()).append("\n");
         }
+        //Bảng 3 : Danh Mục Sản Phẩm
         if (product.getProductType() != null) {
             sb.append("Loại sản phẩm: ").append(product.getProductType().getName()).append("\n");
         }
@@ -146,10 +156,11 @@ public class ProductIngestionService {
             sb.append("Mô tả kỹ thuật chi tiết: ").append(cleanDetail).append("\n");
         }
 
+        //Bảng 4 : Đánh giá sản phẩm
         if (!ragProperties.getIngest().isIncludeReviews()) {
             return sb.toString();
         }
-
+         
         try {
             ApiResponse<CustomPageResponse<ReviewResponseDto>> reviewsResponse =
                     reviewClient.getProductReviews(product.getId(), 0, 50);
@@ -178,7 +189,7 @@ public class ProductIngestionService {
             log.warn("Không thể lấy đánh giá cho sản phẩm ID {}: {}", product.getId(), e.getMessage());
             sb.append("Đánh giá thực tế: Tạm thời chưa đồng bộ được đánh giá.\n");
         }
-
+        // TRẢ VỀ MỘT BÀI VĂN HOÀN CHỈNH GOM TỪ 4 NGUỒN!
         return sb.toString();
     }
 }

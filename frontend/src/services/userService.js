@@ -27,6 +27,19 @@ export const adminGetUsers = async (params = {}) => {
   return res.data;
 };
 
+/** Danh sách khách hàng (role=CUSTOMER) — Sales xem hồ sơ */
+export const adminGetCustomers = async (params = {}) => {
+  return adminGetUsers({ ...params, role: "CUSTOMER" });
+};
+
+/** GET /api/admin/users/{id} */
+export const adminGetUserById = async (id) => {
+  const res = await httpClient.get(`${API}/admin/users/${id}`, {
+    headers: getAuthHeader(),
+  });
+  return res.data;
+};
+
 /**
  * PUT /api/admin/users/{id}/status - Toggle account status (Lock/Unlock)
  */

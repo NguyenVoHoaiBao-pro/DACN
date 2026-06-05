@@ -9,9 +9,10 @@
  */
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { checkWarranty } from "../../services/warrantyService";
 import { formatDate } from "../../utils/formatters";
+import WarrantyClaimSubmitForm from "./WarrantyClaimSubmitForm";
 import "./WarrantyCheckPage.css";
 
 // Bảng ánh xạ trạng thái thiết bị (Enum status)
@@ -114,6 +115,12 @@ const WarrantyCheckPage = () => {
 
     return (
         <div className="warranty-check-page">
+            <div className="warranty-back-home-wrap">
+                <Link to="/" className="warranty-back-home-btn">
+                    ← Quay lại trang chủ
+                </Link>
+            </div>
+
             {/* Hero Section */}
             <div className="warranty-hero">
                 <div className="warranty-hero-icon">🛡️</div>
@@ -245,6 +252,8 @@ const WarrantyCheckPage = () => {
                     </div>
                 </div>
             )}
+
+            <WarrantyClaimSubmitForm defaultImei={imeiInput} />
 
             {/* Footer Hint */}
             <div className="warranty-footer-hint">

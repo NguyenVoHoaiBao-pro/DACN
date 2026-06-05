@@ -165,7 +165,7 @@ const StoreChatbot = () => {
           return;
         }
         const validatorOk =
-          data.validator_configured ?? data.nvidia_configured;
+            data.validator_configured ?? data.nvidia_configured;
         const ok =
           data.neo4j_connected &&
           data.nvidia_configured &&
@@ -340,9 +340,7 @@ const StoreChatbot = () => {
                 <AutoAwesomeIcon sx={{ fontSize: 22 }} />
               </div>
               <div>
-                <div className="store-chatbot-header-title">
-                  Trợ lý Electro
-                </div>
+                <div className="store-chatbot-header-title">Trợ lý Electro</div>
                 <div className="store-chatbot-header-status">
                   <span
                     className={`store-chatbot-status-dot ${status.online ? "online" : "offline"}`}

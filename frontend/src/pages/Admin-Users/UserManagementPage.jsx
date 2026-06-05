@@ -46,10 +46,13 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
+import { usePermissions } from "../../hooks/usePermissions";
 import { adminGetUsers, adminToggleUserStatus, adminCreateUser, adminUpdateUser } from "../../services/userService";
 import { isApiSuccess } from "../../utils/apiResponse";
 
 const UserManagementPage = () => {
+  const { hasPermission } = usePermissions();
+  const canManageUsers = hasPermission("USER_MANAGE");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -155,19 +158,21 @@ const UserManagementPage = () => {
               Tổng số {totalElements} tài khoản đang được quản lý trong hệ thống
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenModal("add")}
-            sx={{
-              bgcolor: "#ff9f1a", "&:hover": { bgcolor: "#e68a00" },
-              px: 3, py: 1.2, borderRadius: "10px",
-              fontWeight: "bold", textTransform: "none", fontSize: "1rem",
-              boxShadow: "0 4px 12px rgba(255,159,26,0.3)",
-            }}
-          >
-            Thêm Người Dùng
-          </Button>
+          {canManageUsers && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenModal("add")}
+              sx={{
+                bgcolor: "#ff9f1a", "&:hover": { bgcolor: "#e68a00" },
+                px: 3, py: 1.2, borderRadius: "10px",
+                fontWeight: "bold", textTransform: "none", fontSize: "1rem",
+                boxShadow: "0 4px 12px rgba(255,159,26,0.3)",
+              }}
+            >
+              Thêm Người Dùng
+            </Button>
+          )}
         </Box>
 
         {/* ═══ STAT CARDS ═══ */}
@@ -394,9 +399,9 @@ const UserManagementPage = () => {
                           }
                           label={user.status === 1 ? "Hoạt động" : "Bị khóa"}
                           size="small"
-                          onClick={() => handleToggleStatus(user)}
+                          onClick={canManageUsers ? () => handleToggleStatus(user) : undefined}
                           sx={{
-                            cursor: "pointer",
+                            cursor: canManageUsers ? "pointer" : "default",
                             fontWeight: "700",
                             bgcolor: user.status === 1 ? "#f0fdf4" : "#fef2f2",
                             color: user.status === 1 ? "#16a34a" : "#dc2626",
@@ -415,26 +420,30 @@ const UserManagementPage = () => {
 
                       {/* Actions */}
                       <TableCell align="center" sx={{ py: 2, px: 3 }}>
-                        <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <Tooltip title="Chỉnh sửa">
-                            <IconButton size="small" onClick={() => handleOpenModal("edit", user)} color="warning">
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title={user.status === 1 ? "Khóa tài khoản" : "Mở khóa tài khoản"}>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleToggleStatus(user)}
-                              sx={{
-                                bgcolor: user.status === 1 ? "#fef2f2" : "#ecfdf5",
-                                color: user.status === 1 ? "#ef4444" : "#10b981",
-                                "&:hover": { bgcolor: user.status === 1 ? "#fee2e2" : "#d1fae5" },
-                              }}
-                            >
-                              {user.status === 1 ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
+                        {canManageUsers ? (
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="Chỉnh sửa">
+                              <IconButton size="small" onClick={() => handleOpenModal("edit", user)} color="warning">
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={user.status === 1 ? "Khóa tài khoản" : "Mở khóa tài khoản"}>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleToggleStatus(user)}
+                                sx={{
+                                  bgcolor: user.status === 1 ? "#fef2f2" : "#ecfdf5",
+                                  color: user.status === 1 ? "#ef4444" : "#10b981",
+                                  "&:hover": { bgcolor: user.status === 1 ? "#fee2e2" : "#d1fae5" },
+                                }}
+                              >
+                                {user.status === 1 ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">—</Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

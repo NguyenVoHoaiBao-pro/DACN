@@ -67,7 +67,7 @@ public class UserController {
      * Tìm kiếm người dùng (Dành cho nhân viên kiểm tra thông tin khách hàng)
      */
     @GetMapping("/search")
-    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'CUSTOMER_VIEW')")
+    @PreAuthorize("hasAnyAuthority('USER_MANAGE', 'CUSTOMER_VIEW', 'ROLE_SALES', 'SALES')")
     public ResponseEntity<ApiResponse<Page<UserDto.Response>>> searchUsers(
             @RequestParam String keyword,
             @RequestParam(defaultValue = "0") int page,

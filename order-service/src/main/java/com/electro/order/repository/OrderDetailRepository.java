@@ -39,4 +39,16 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, Intege
             "WHERE o.userId = :userId AND od.productId = :productId " +
             "AND o.status IN ('DELIVERED', 'COMPLETED') ORDER BY o.deliveredAt DESC")
     List<Integer> findVerifiedOrderIds(@Param("userId") Integer userId, @Param("productId") Integer productId, Pageable pageable);
+
+    // ─── Internal API queries ───────────────────────────────────────────────
+
+    @Query("SELECT DISTINCT od.productId FROM OrderDetail od JOIN od.order o " +
+            "WHERE o.userId = :userId AND o.status IN :statuses AND od.productId IS NOT NULL")
+    List<Integer> findDistinctPurchasedProductIds(
+            @Param("userId") Integer userId,
+            @Param("statuses") List<Order.OrderStatus> statuses);
+
+    @Query("SELECT DISTINCT o.userId, od.productId FROM OrderDetail od JOIN od.order o " +
+            "WHERE o.status IN :statuses AND o.userId IS NOT NULL AND od.productId IS NOT NULL")
+    List<Object[]> findAllPurchasedUserProducts(@Param("statuses") List<Order.OrderStatus> statuses);
 }

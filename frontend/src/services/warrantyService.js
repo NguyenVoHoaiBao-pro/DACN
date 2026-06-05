@@ -85,6 +85,134 @@ export const updateWarrantyTicketStatus = async (id, data) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// WARRANTY CLAIMS — Yêu cầu BH online (Sales workflow)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const authHeader = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+export const getWarrantyClaims = async (params = {}) => {
+  const res = await httpClient.get(`${API_PREFIX}/admin/warranty/claims`, {
+    params,
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const getWarrantyClaimDetail = async (id) => {
+  const res = await httpClient.get(`${API_PREFIX}/admin/warranty/claims/${id}`, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const getWarrantyReturnTracking = async (id) => {
+  const res = await httpClient.get(`${API_PREFIX}/admin/warranty/claims/${id}/return-tracking`, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const getMyWarrantyClaimDetail = async (id) => {
+  const res = await httpClient.get(`${API_PREFIX}/warranty/claims/mine/${id}`, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const approveWarrantyClaim = async (id, payload = {}) => {
+  const body =
+    typeof payload === "string"
+      ? { staffNotes: payload }
+      : {
+          staffNotes: payload.staffNotes ?? "",
+          returnCarrier: payload.returnCarrier,
+          returnTrackingCode: payload.returnTrackingCode,
+        };
+  const res = await httpClient.put(
+    `${API_PREFIX}/admin/warranty/claims/${id}/approve`,
+    body,
+    { headers: authHeader() }
+  );
+  return res.data;
+};
+
+export const rejectWarrantyClaim = async (id, reason) => {
+  const res = await httpClient.put(
+    `${API_PREFIX}/admin/warranty/claims/${id}/reject`,
+    { reason },
+    { headers: authHeader() }
+  );
+  return res.data;
+};
+
+/** Tra cứu ticket APPROVED chờ nhận tại kho (mã vận đơn hoặc #BH-...) */
+export const lookupWarrantyInbound = async (keyword) => {
+  const res = await httpClient.get(`${API_PREFIX}/admin/warranty/claims/inbound/lookup`, {
+    params: { keyword: keyword.trim() },
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const markWarrantyClaimReceived = async (id, inboundPayload = null) => {
+  const body = inboundPayload
+    ? {
+        receivedImei: inboundPayload.receivedImei,
+        boxCondition: inboundPayload.boxCondition,
+        warehouseNotes: inboundPayload.warehouseNotes ?? "",
+      }
+    : null;
+  const res = await httpClient.put(`${API_PREFIX}/admin/warranty/claims/${id}/received`, body, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const submitWarrantyInspection = async (id, inspectionResult) => {
+  const res = await httpClient.put(
+    `${API_PREFIX}/admin/warranty/claims/${id}/inspection`,
+    { inspectionResult },
+    { headers: authHeader() }
+  );
+  return res.data;
+};
+
+export const resolveWarrantyClaim = async (id, resolution, staffNotes = "") => {
+  const res = await httpClient.put(
+    `${API_PREFIX}/admin/warranty/claims/${id}/resolve`,
+    { resolution, staffNotes },
+    { headers: authHeader() }
+  );
+  return res.data;
+};
+
+export const closeWarrantyClaim = async (id) => {
+  const res = await httpClient.put(`${API_PREFIX}/admin/warranty/claims/${id}/close`, null, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+export const submitWarrantyClaim = async (payload) => {
+  const res = await httpClient.post(`${API_PREFIX}/warranty/claims`, payload, {
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+/** GET /api/warranty/claims/mine — Yêu cầu BH của khách đang đăng nhập */
+export const getMyWarrantyClaims = async (params = {}) => {
+  const res = await httpClient.get(`${API_PREFIX}/warranty/claims/mine`, {
+    params,
+    headers: authHeader(),
+  });
+  return res.data;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ADMIN — Nhập IMEI vào kho (Cần JWT — WAREHOUSE hoặc ADMIN)
 // ═══════════════════════════════════════════════════════════════════════════════
 

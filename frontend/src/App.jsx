@@ -29,8 +29,11 @@ import ForgotPassword from "./pages/auth/ForgotPassword.jsx";
 import ResetPassword from "./pages/auth/ResetPassword.jsx";
 import Checkout from "./pages/Checkout/Checkout.jsx";
 import Contact from "./pages/Contact";
+import SalesLiveChatPage from "./pages/SalesLiveChat/SalesLiveChatPage.jsx";
 import Home from "./pages/Home";
 import OrderHistoryPage from "./pages/Order-Management/OrderHistoryPage.jsx";
+import UserWarrantyPage from "./pages/User-Warranty/UserWarrantyPage.jsx";
+import UserWarrantyClaimDetailPage from "./pages/User-Warranty/UserWarrantyClaimDetailPage.jsx";
 import Shop from "./pages/Shop";
 import ProfilePage from "./pages/UserProfile/ProfilePage.jsx";
 import AddressPage from "./pages/UserProfile/AddressPage.jsx";
@@ -47,6 +50,7 @@ import AnalyticsPage from "./pages/Admin-Analytics/AnalyticsPage.jsx";
 import BannerManagementPage from "./pages/Admin-Banner/BannerManagementPage.jsx";
 import CategoryManagementPage from "./pages/Admin-Categories/CategoryManagementPage.jsx";
 import UserManagementPage from "./pages/Admin-Users/UserManagementPage.jsx";
+import CustomerProfilesPage from "./pages/Admin-Customers/CustomerProfilesPage.jsx";
 import DashboardPage from "./pages/Admin-Dashboard/DashboardPage.jsx";
 import InventoryManagementPage from "./pages/Admin-Inventory/InventoryManagementPage.jsx";
 import OrderManagementPage from "./pages/Admin-Orders/OrderManagementPage.jsx";
@@ -55,12 +59,19 @@ import ProductManagementPage from "./pages/Admin-Products/ProductManagementPage.
 import AdminProductFormPage from "./pages/Admin-Products/AdminProductFormPage.jsx";
 import AdminProductDetailPage from "./pages/Admin-Products/AdminProductDetailPage.jsx";
 import WarrantyManagementPage from "./pages/Admin-Warranty/WarrantyManagementPage.jsx";
+import SalesWarrantyClaimsPage from "./pages/Admin-Warranty/SalesWarrantyClaimsPage.jsx";
+import SalesWarrantyClaimDetailPage from "./pages/Admin-Warranty/SalesWarrantyClaimDetailPage.jsx";
+import WarrantyInboundPage from "./pages/Admin-Warranty/WarrantyInboundPage.jsx";
 import ImeiManagementPage from "./pages/Admin-Imei/ImeiManagementPage.jsx";
 import StockReturnPage from "./pages/Admin-Inventory/StockReturnPage.jsx";
 import AttributeManagementPage from "./pages/Admin-Attributes/AttributeManagementPage.jsx";
 import CouponManagementPage from "./pages/Admin-Coupons/CouponManagementPage.jsx";
 import ProducerManagementPage from "./pages/Admin-Producers/ProducerManagementPage.jsx";
 import ReviewManagementPage from "./pages/Admin-Reviews/ReviewManagementPage.jsx";
+import SalesOmnichannelPage from "./pages/Admin-Sales/SalesOmnichannelPage.jsx";
+import SalesPipelinePage from "./pages/Admin-Sales/SalesPipelinePage.jsx";
+import SalesKpiConfigPage from "./pages/Admin-Sales/SalesKpiConfigPage.jsx";
+import SalesProductConsultationPage from "./pages/Admin-Sales/SalesProductConsultationPage.jsx";
 
 
 
@@ -159,8 +170,13 @@ function App() {
                         <InventoryManagementPage />
                       </ProtectedRoute>
                     } />
+                    <Route path="customers" element={
+                      <ProtectedRoute requiredPermission="CUSTOMER_VIEW">
+                        <CustomerProfilesPage />
+                      </ProtectedRoute>
+                    } />
                     <Route path="users" element={
-                      <ProtectedRoute requiredAny={["USER_MANAGE", "CUSTOMER_VIEW"]}>
+                      <ProtectedRoute requiredPermission="USER_MANAGE">
                         <UserManagementPage />
                       </ProtectedRoute>
                     } />
@@ -184,6 +200,16 @@ function App() {
                         <WarrantyManagementPage />
                       </ProtectedRoute>
                     } />
+                    <Route path="warranty-claims" element={
+                      <ProtectedRoute requiredAny={["WARRANTY_MANAGE", "CUSTOMER_VIEW"]}>
+                        <SalesWarrantyClaimsPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="warranty-claims/:id" element={
+                      <ProtectedRoute requiredAny={["WARRANTY_MANAGE", "CUSTOMER_VIEW"]}>
+                        <SalesWarrantyClaimDetailPage />
+                      </ProtectedRoute>
+                    } />
                     <Route path="imei" element={
                       <ProtectedRoute requiredPermission="IMEI_MANAGE">
                         <ImeiManagementPage />
@@ -192,6 +218,31 @@ function App() {
                     <Route path="return" element={
                       <ProtectedRoute requiredPermission="STOCK_RETURN">
                         <StockReturnPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="warranty-inbound" element={
+                      <ProtectedRoute requiredAny={["STOCK_IMPORT", "IMEI_MANAGE"]}>
+                        <WarrantyInboundPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="sales/consultation" element={
+                      <ProtectedRoute requiredPermission="PRODUCT_VIEW">
+                        <SalesProductConsultationPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="sales/chat" element={
+                      <ProtectedRoute requiredAny={["ORDER_VIEW_ALL", "CUSTOMER_VIEW", "WARRANTY_MANAGE"]}>
+                        <SalesOmnichannelPage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="sales/pipeline" element={
+                      <ProtectedRoute requiredAny={["ORDER_VIEW_ALL", "REPORT_SALES"]}>
+                        <SalesPipelinePage />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="sales/kpi-config" element={
+                      <ProtectedRoute requiredAny={["USER_MANAGE", "ROLE_ADMIN"]}>
+                        <SalesKpiConfigPage />
                       </ProtectedRoute>
                     } />
                     <Route path="coupons" element={
@@ -240,6 +291,7 @@ function App() {
                       <Route path="/about" element={<About />} />
                       <Route path="/blog" element={<Blog />} />
                       <Route path="/faq" element={<FAQ />} />
+                      <Route path="/chat-nhan-vien" element={<SalesLiveChatPage />} />
                       <Route path="/terms" element={<Terms />} />
                       <Route path="/checkout" element={<Checkout />} />
                       <Route path="/payment/success" element={<PaymentSuccess />} />
@@ -251,6 +303,8 @@ function App() {
                         path="/user/orders"
                         element={<OrderHistoryPage />}
                       />
+                      <Route path="/user/warranty" element={<UserWarrantyPage />} />
+                      <Route path="/user/warranty/:id" element={<UserWarrantyClaimDetailPage />} />
                       <Route path="/rtk-demo" element={<RTKQueryDemo />} />
                       <Route
                         path="/app-slice-demo"

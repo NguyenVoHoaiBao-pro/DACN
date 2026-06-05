@@ -97,10 +97,12 @@ export const adminGetOrders = async (
   keyword = null,
   sortBy = "orderDate",
   sortDir = "desc",
+  userId = null,
 ) => {
   const params = { page, size, sortBy, sortDir };
   if (status) params.status = status;
   if (keyword) params.keyword = keyword;
+  if (userId != null) params.userId = userId;
   const res = await httpClient.get(ADMIN_API, { params });
   return res.data?.data;
 };
@@ -118,6 +120,14 @@ export const adminGetOrderStats = async () => {
  */
 export const adminGetOrderDetail = async (id) => {
   const res = await httpClient.get(`${ADMIN_API}/${id}`);
+  return res.data?.data;
+};
+
+/**
+ * PUT /api/admin/orders/{id}/delivery-info — Sửa thông tin giao hàng & ghi chú (Sales: PENDING/CONFIRMED)
+ */
+export const adminUpdateOrderDelivery = async (id, request) => {
+  const res = await httpClient.put(`${ADMIN_API}/${id}/delivery-info`, request);
   return res.data?.data;
 };
 

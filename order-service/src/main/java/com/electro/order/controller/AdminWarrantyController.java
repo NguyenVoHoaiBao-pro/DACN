@@ -38,7 +38,7 @@ public class AdminWarrantyController {
     }
 
     @GetMapping("/tickets")
-    @PreAuthorize("hasAnyAuthority('WARRANTY_MANAGE', 'ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('WARRANTY_MANAGE', 'CUSTOMER_VIEW', 'ROLE_ADMIN', 'ROLE_SALES', 'SALES')")
     public ResponseEntity<ApiResponse<Page<WarrantyDto.TicketResponse>>> getAllTickets(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "status", required = false) String status,
@@ -50,7 +50,7 @@ public class AdminWarrantyController {
     }
 
     @GetMapping("/tickets/{id}")
-    @PreAuthorize("hasAnyAuthority('WARRANTY_MANAGE', 'ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('WARRANTY_MANAGE', 'CUSTOMER_VIEW', 'ROLE_ADMIN', 'ROLE_SALES', 'SALES')")
     public ResponseEntity<ApiResponse<WarrantyDto.TicketResponse>> getTicketById(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.success("Chi tiết phiếu bảo hành", warrantyService.getTicketById(id)));
     }

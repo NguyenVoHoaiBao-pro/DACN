@@ -5,6 +5,7 @@ import {
   ReceiptLongOutlined as OrderIcon,
   Search as SearchIcon,
   Shuffle as ShuffleIcon,
+  ShieldOutlined as ShieldOutlinedIcon,
 } from "@mui/icons-material";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import {
@@ -363,6 +364,15 @@ const Header = () => {
                 >
                   <OrderIcon sx={{ mr: 1, fontSize: 20 }} />
                   Đơn hàng của tôi
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    navigate("/user/warranty");
+                    setAnchorEl(null);
+                  }}
+                >
+                  <ShieldOutlinedIcon sx={{ mr: 1, fontSize: 20 }} />
+                  Bảo hành & Sửa chữa
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogout} sx={{ color: "#D32F2F" }}>

@@ -42,6 +42,9 @@ public class OrderDto {
 
         // Ghi chú
         private String note;
+
+        /** ID nhân viên Sales (link giới thiệu ?ref=) — gán SALES_LINK + HH theo nguồn link */
+        private Integer salesRef;
     }
 
     // ─── Request: Hủy đơn ─────────────────────────────────────────────────────
@@ -199,6 +202,29 @@ public class OrderDto {
         private List<String> imeis;
     }
 
+    // ─── Request: Sales/Admin sửa thông tin giao hàng & ghi chú (không đổi tiền) ───
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class UpdateDeliveryInfoRequest {
+        @NotBlank(message = "Tên người nhận là bắt buộc")
+        private String shippingName;
+
+        @NotBlank(message = "Số điện thoại nhận hàng là bắt buộc")
+        private String shippingPhone;
+
+        @NotBlank(message = "Địa chỉ giao hàng là bắt buộc")
+        private String shippingAddress;
+
+        private String shippingProvince;
+        private String shippingDistrict;
+        private String shippingWard;
+        /** Ghi chú đơn (khách / lời nhắn giao hàng) */
+        private String note;
+        /** Ghi chú nội bộ cho shipper */
+        private String adminNote;
+    }
+
     // ─── Request: Admin ẩn / hiện đơn hàng (Soft Delete) ──────────────────────────────
     @Data
     @NoArgsConstructor
@@ -294,6 +320,11 @@ public class OrderDto {
 
         // Soft Delete flag
         private Boolean isHidden;
+
+        private Integer assignedSalesUserId;
+        private String assignedSalesName;
+        private String orderSource;
+        private String salesPipelineStatus;
     }
 
     // ─── Response: Thống kê đơn hàng ─────────────────────────────────────────

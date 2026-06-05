@@ -23,7 +23,7 @@ public class AdminProductController {
     private final ProductService productService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'PRODUCT_VIEW')")
     public ResponseEntity<ApiResponse<Page<ProductDto.AdminProductListResponse>>> getAllProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean isActive,
@@ -38,13 +38,13 @@ public class AdminProductController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'PRODUCT_VIEW')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getProductStats() {
         return ResponseEntity.ok(ApiResponse.success("Product stats", productService.adminGetProductStats()));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'PRODUCT_VIEW')")
     public ResponseEntity<ApiResponse<ProductDto.AdminProductResponse>> getProductById(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.success("Product retrieved", productService.adminGetProductById(id)));
     }

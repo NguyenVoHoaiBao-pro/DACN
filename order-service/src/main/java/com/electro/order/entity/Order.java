@@ -124,6 +124,17 @@ public class Order {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    @Column(name = "assigned_sales_user_id")
+    private Integer assignedSalesUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_source", length = 30)
+    private OrderSource orderSource = OrderSource.WEB_ORGANIC;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sales_pipeline_status", length = 40)
+    private SalesPipelineStatus salesPipelineStatus = SalesPipelineStatus.NEW_ASSIGNED;
+
     // Relationships
     @Column(name = "user_id", nullable = false)
     private Integer userId;
@@ -158,5 +169,20 @@ public class Order {
 
     public enum PaymentStatus {
         PENDING, PAID, FAILED, REFUNDED
+    }
+
+    public enum OrderSource {
+        WEB_ORGANIC,
+        WEB_ASSIGNED,
+        SALES_CHAT,
+        SALES_LINK,
+        ADMIN_SALES
+    }
+
+    public enum SalesPipelineStatus {
+        NEW_ASSIGNED,
+        CALLING,
+        THINKING,
+        APPROVED_WAREHOUSE
     }
 }

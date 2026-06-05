@@ -202,7 +202,8 @@ const Footer = () => {
                 { label: "Chính Sách Bảo Mật" },
                 { label: "Điều Khoản & Điều Kiện" },
                 { label: "Tra Cứu Bảo Hành", href: "/warranty-check" },
-                { label: "Câu Hỏi Thường Gặp" },
+                { label: "Chat Với Nhân Viên", href: "/chat-nhan-vien" },
+                { label: "Câu Hỏi Thường Gặp", href: "/faq" },
               ]}
             />
           </Grid>

@@ -163,9 +163,22 @@ public class ProductDto {
         private Double price;
         private Double originalPrice;
         private Integer stockQuantity;
+        /** Số máy IMEI/serial trạng thái AVAILABLE — sẵn sàng bán */
+        private Integer availableQuantity;
         private Boolean isActive;
         private Boolean isDefault;
         private java.util.List<AttributeValueResponse> attributeValues;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SpecificationResponse {
+        private String categoryName;
+        private String name;
+        private String code;
+        private String value;
+        private String unit;
     }
 
     @Data
@@ -184,6 +197,8 @@ public class ProductDto {
         private String imageUrl;
         private Double basePrice;
         private Integer totalQuantity;
+        /** Tổng máy IMEI AVAILABLE trên các biến thể đang bán */
+        private Integer totalAvailableQuantity;
         private String status;
         private Boolean isFeatured;
         private ProductTypeDto productType;
@@ -199,12 +214,16 @@ public class ProductDto {
         private String description;
         private String status;
         private Boolean isFeatured;
+        private Boolean requiresImei;
+        /** Chính sách BH đi kèm (từ thông số WARRANTY hoặc mặc định) */
+        private String warrantyPolicy;
         private ProductTypeDto productType;
         private ProducerDto producer;
         private CouponDto coupon;
         private LocalDate createdAt;
         private java.util.List<VariantDto> variants;
         private java.util.List<ImageDto> images;
+        private java.util.List<SpecificationResponse> specifications;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor

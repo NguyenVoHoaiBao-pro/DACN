@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  ai_recommender:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: electro_ai_engine
+    ports:
+      - "5003:5003"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AI_PORT=5003
+      - APP_NAME=reco-service
+      - EUREKA_SERVER_URL=http://host.docker.internal:8761/eureka/
+      # Cho phép container kết nối đến MySQL chạy trên Windows host
+      - DB_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      - ./collaborativefiltering/asset:/app/collaborativefiltering/asset

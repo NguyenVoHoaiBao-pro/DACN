@@ -28,6 +28,9 @@ server:
 ghn:
   base-url: ${GHN_BASE_URL:https://online-gateway.ghn.vn}
   fallback-shipping-fee: 30000
+  warehouse-name: ${GHN_WAREHOUSE_NAME:Electro Store - Kho Bảo Hành}
+  warehouse-phone: ${GHN_WAREHOUSE_PHONE:0900000000}
+  warehouse-address: ${GHN_WAREHOUSE_ADDRESS:Kho Electro Store, TP. Hồ Chí Minh}
 
 # VNPay — khai bao tai day de khong phu thuoc config-server (tranh YOUR_TMN_CODE mac dinh)
 payment:

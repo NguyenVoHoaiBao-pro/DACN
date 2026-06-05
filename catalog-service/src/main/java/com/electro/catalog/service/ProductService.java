@@ -44,6 +44,12 @@ public class ProductService {
     private com.electro.catalog.repository.ImageRepository imageRepository;
 
     @Autowired
+    private com.electro.catalog.repository.ProductItemRepository productItemRepository;
+
+    @Autowired
+    private com.electro.catalog.repository.ProductSpecificationRepository productSpecificationRepository;
+
+    @Autowired
     private ModelMapper modelMapper;
 
     @org.springframework.beans.factory.annotation.Value("${app.server.url:http://localhost:8080}")
@@ -204,6 +210,12 @@ public class ProductService {
     }
 
     private ProductDto.VariantDto mapVariantToDto(com.electro.catalog.entity.ProductVariant variant) {
+        return mapVariantToDto(variant, java.util.Collections.emptyMap());
+    }
+
+    private ProductDto.VariantDto mapVariantToDto(
+            com.electro.catalog.entity.ProductVariant variant,
+            java.util.Map<Integer, Integer> availableByVariantId) {
         ProductDto.VariantDto vDto = new ProductDto.VariantDto();
         vDto.setId(variant.getId());
         if (variant.getProduct() != null) {
@@ -215,10 +227,10 @@ public class ProductService {
         vDto.setPrice(variant.getPrice() != null ? variant.getPrice().doubleValue() : 0.0);
         vDto.setOriginalPrice(variant.getOriginalPrice() != null ? variant.getOriginalPrice().doubleValue() : null);
         vDto.setStockQuantity(variant.getStockQuantity());
+        vDto.setAvailableQuantity(availableByVariantId.getOrDefault(variant.getId(), 0));
         vDto.setIsActive(variant.getIsActive());
         vDto.setIsDefault(variant.getIsDefault());
 
-        // Map structured attribute values (Color, Storage, etc.)
         if (variant.getAttributeValues() != null) {
             java.util.List<ProductDto.AttributeValueResponse> attrValues = new java.util.ArrayList<>();
             for (var attr : variant.getAttributeValues()) {
@@ -233,6 +245,48 @@ public class ProductService {
             vDto.setAttributeValues(attrValues);
         }
         return vDto;
+    }
+
+    private java.util.Map<Integer, Integer> loadAvailableCounts(java.util.List<Integer> variantIds) {
+        if (variantIds == null || variantIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Map<Integer, Integer> map = new java.util.HashMap<>();
+        for (Object[] row : productItemRepository.countAvailableByVariantIds(
+                variantIds, com.electro.catalog.entity.ProductItemStatus.AVAILABLE)) {
+            map.put((Integer) row[0], ((Number) row[1]).intValue());
+        }
+        return map;
+    }
+
+    private java.util.List<ProductDto.SpecificationResponse> mapSpecifications(Integer productId) {
+        return productSpecificationRepository.findByProductId(productId).stream()
+                .map(ps -> {
+                    ProductDto.SpecificationResponse spec = new ProductDto.SpecificationResponse();
+                    if (ps.getSpecification() != null) {
+                        spec.setCategoryName(ps.getSpecification().getCategoryName());
+                        spec.setName(ps.getSpecification().getName());
+                        spec.setCode(ps.getSpecification().getCode());
+                        spec.setUnit(ps.getSpecification().getUnit());
+                    }
+                    spec.setValue(ps.getValue());
+                    return spec;
+                })
+                .sorted(java.util.Comparator.comparing(
+                        s -> s.getCategoryName() != null ? s.getCategoryName() : "",
+                        java.util.Comparator.naturalOrder()))
+                .toList();
+    }
+
+    private String resolveWarrantyPolicy(java.util.List<ProductDto.SpecificationResponse> specs) {
+        if (specs != null) {
+            for (ProductDto.SpecificationResponse spec : specs) {
+                if ("WARRANTY".equalsIgnoreCase(spec.getCode()) && spec.getValue() != null && !spec.getValue().isBlank()) {
+                    return spec.getValue();
+                }
+            }
+        }
+        return "12 tháng (chính sách mặc định)";
     }
 
     public Page<ProductDto.Response> getProductsByBrand(String brand, Pageable pageable) {
@@ -421,12 +475,21 @@ public class ProductService {
             }
             
             int totalQuantity = 0;
+            int totalAvailable = 0;
             if (product.getVariants() != null) {
-                totalQuantity = product.getVariants().stream()
-                        .mapToInt(v -> v.getStockQuantity() != null ? v.getStockQuantity() : 0)
-                        .sum();
+                java.util.List<Integer> variantIds = product.getVariants().stream()
+                        .map(com.electro.catalog.entity.ProductVariant::getId)
+                        .toList();
+                java.util.Map<Integer, Integer> availableMap = loadAvailableCounts(variantIds);
+                for (var v : product.getVariants()) {
+                    totalQuantity += v.getStockQuantity() != null ? v.getStockQuantity() : 0;
+                    if (Boolean.TRUE.equals(v.getIsActive())) {
+                        totalAvailable += availableMap.getOrDefault(v.getId(), 0);
+                    }
+                }
             }
             response.setTotalQuantity(totalQuantity);
+            response.setTotalAvailableQuantity(totalAvailable);
             return response;
         });
     }
@@ -438,6 +501,11 @@ public class ProductService {
         response.setBasePrice(product.getBasePrice() != null ? product.getBasePrice().doubleValue() : 0.0);
         response.setStatus(product.getIsActive() != null && product.getIsActive() ? "ACTIVE" : "INACTIVE");
         response.setCreatedAt(product.getCreatedAt() != null ? product.getCreatedAt().toLocalDate() : null);
+        response.setRequiresImei(product.getRequiresImei());
+
+        java.util.List<ProductDto.SpecificationResponse> specs = mapSpecifications(id);
+        response.setSpecifications(specs);
+        response.setWarrantyPolicy(resolveWarrantyPolicy(specs));
 
         if (product.getImages() != null && !product.getImages().isEmpty()) {
             java.util.List<ProductDto.ImageDto> imgs = new java.util.ArrayList<>();
@@ -451,10 +519,16 @@ public class ProductService {
             response.setImages(imgs);
         }
 
-        if (product.getVariants() != null && !product.getVariants().isEmpty()) {
+        java.util.List<com.electro.catalog.entity.ProductVariant> variants =
+                productVariantRepository.findByProductId(id);
+        if (variants != null && !variants.isEmpty()) {
+            java.util.List<Integer> variantIds = variants.stream()
+                    .map(com.electro.catalog.entity.ProductVariant::getId)
+                    .toList();
+            java.util.Map<Integer, Integer> availableMap = loadAvailableCounts(variantIds);
             java.util.List<ProductDto.VariantDto> variantDtos = new java.util.ArrayList<>();
-            for (var variant : product.getVariants()) {
-                variantDtos.add(mapVariantToDto(variant));
+            for (var variant : variants) {
+                variantDtos.add(mapVariantToDto(variant, availableMap));
             }
             response.setVariants(variantDtos);
         }

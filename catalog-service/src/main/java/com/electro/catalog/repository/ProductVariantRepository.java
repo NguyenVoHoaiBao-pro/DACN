@@ -23,6 +23,9 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
            "WHERE v.product.id = :productId")
     List<ProductVariant> findByProductId(Integer productId);
 
+    @Query("SELECT v FROM ProductVariant v LEFT JOIN FETCH v.product WHERE v.id IN :ids")
+    List<ProductVariant> findAllByIdWithProduct(@Param("ids") java.util.Collection<Integer> ids);
+
     java.util.Optional<ProductVariant> findBySkuCode(String skuCode);
 
     void deleteByProductId(Integer productId);

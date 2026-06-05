@@ -1,17 +1,29 @@
 package com.electro.statistics.service;
 
-import com.electro.statistics.client.CatalogClient;
-import com.electro.statistics.client.OrderStatisticsClient;
-import com.electro.statistics.dto.*;
-import com.electro.statistics.repository.UserInteractionRepository;
-import lombok.RequiredArgsConstructor;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.*;
-import java.util.stream.Collectors;
+import com.electro.statistics.client.CatalogClient;
+import com.electro.statistics.client.OrderStatisticsClient;
+import com.electro.statistics.dto.ConversionRateStatsDTO;
+import com.electro.statistics.dto.CustomerSegmentStatsDTO;
+import com.electro.statistics.dto.OrderStatusStatsDTO;
+import com.electro.statistics.dto.OverviewStatisticsDTO;
+import com.electro.statistics.dto.PaymentMethodStatsDTO;
+import com.electro.statistics.dto.RecentOrderDTO;
+import com.electro.statistics.dto.RevenueChartDTO;
+import com.electro.statistics.dto.RevenueStatisticsDTO;
+import com.electro.statistics.dto.TopProductStatsDTO;
+import com.electro.statistics.dto.TopProductsStatisticsDTO;
+import com.electro.statistics.repository.UserInteractionRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +35,10 @@ public class StatisticsDashboardService {
     private final UserInteractionRepository userInteractionRepository;
 
     public OverviewStatisticsDTO getOverviewStatistics() {
-        Map<String, Object> data = safeOrderCall(orderStatisticsClient::getOverview, Map.of());
+            // 1. Gọi an toàn sang Order-Service. Nếu sập, trả về Map rỗng (Map.of())
+            Map<String, Object> data = safeOrderCall(orderStatisticsClient::getOverview, Map.of());
+            // 2. Map rỗng đưa vào hàm toBigDecimal() và toLong() sẽ tự động biến thành các số 0 (Zero) 
+    // Nhờ các hàm tiện ích an toàn (toBigDecimal, toLong) nằm ở cuối file.
         return OverviewStatisticsDTO.builder()
                 .totalRevenue(toBigDecimal(data.get("totalRevenue")))
                 .totalOrders(toLong(data.get("totalOrders")))
@@ -222,9 +237,13 @@ public class StatisticsDashboardService {
 
     private <T> T safeOrderCall(OrderCall<T> call, T fallback) {
         try {
+            // Cầu dao đóng (Bình thường): Thử gọi sang Order Service lấy doanh thu)
             T result = call.get();
             return result != null ? result : fallback;
         } catch (Exception e) {
+            // Cầu dao MỞ (Khi Order-Service bị sập hoặc quá tải):
+        // Bắt ngay lỗi CallNotPermittedException do Resilience4j ném ra.
+        // Trả về DỮ LIỆU GIẢ (fallback) thay vì báo lỗi hệ thống.
             return fallback;
         }
     }

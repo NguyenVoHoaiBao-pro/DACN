@@ -1,9 +1,11 @@
 /**
- * Java Spring AI RAG Chatbot API (mặc định port 8092).
- * Cấu hình: VITE_CHATBOT_API_URL trong .env
+ * Java Spring AI RAG Chatbot API — đi qua API Gateway (port 8080).
+ * Cấu hình: VITE_API_URL trong .env (Gateway), hoặc VITE_CHATBOT_API_URL để override.
  */
 const CHATBOT_BASE =
-  import.meta.env.VITE_CHATBOT_API_URL || "http://localhost:8092";
+  import.meta.env.VITE_CHATBOT_API_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8080";
 
 async function parseJson(res) {
   try {

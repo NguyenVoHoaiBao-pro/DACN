@@ -1,5 +1,6 @@
 import {
   CheckCircle as CheckIcon,
+  Cancel as CancelOrderIcon,
   DeleteOutline as TrashIcon,
   FilterList as FilterIcon,
   Search as SearchIcon,
@@ -38,25 +39,34 @@ import {
   Typography,
   Snackbar,
   Alert,
+  Tooltip,
 } from "@mui/material";
 import { useState, useEffect, useCallback } from "react";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
 import {
   adminGetOrders,
   adminGetHiddenOrders,
+  adminGetOrderDetail,
   adminUpdateOrderStatus,
   adminUpdatePaymentStatus,
   adminUpdateVisibility,
 } from "../../services/orderService";
 import { formatMoney } from "../../utils/formatters";
 import AdminOrderDetailDialog from "./AdminOrderDetailDialog";
+import SalesDeliveryEditDialog from "./SalesDeliveryEditDialog";
+import { usePermissions } from "../../hooks/usePermissions";
+import { canSalesEditDelivery } from "../../utils/orderDeliveryEdit";
+import {
+  getAllowedNextStatuses,
+  resolveOrderCaps,
+} from "../../utils/orderRolePermissions";
 
 // ─── Status Configs ───
 const ORDER_STATUS_TABS = [
   { label: "Tất cả", value: "ALL" },
   { label: "Chờ xác nhận", value: "PENDING" },
   { label: "Đã xác nhận", value: "CONFIRMED" },
-  { label: "Đang xử lý", value: "PROCESSING" },
+  { label: "Đang đóng gói", value: "PROCESSING" },
   { label: "Đang giao", value: "SHIPPING" },
   { label: "Đã giao", value: "DELIVERED" },
   { label: "Hoàn thành", value: "COMPLETED" },
@@ -71,7 +81,7 @@ const getOrderStatusConfig = (status) => {
     case "CONFIRMED":
       return { label: "Đã xác nhận", color: "info" };
     case "PROCESSING":
-      return { label: "Đang xử lý", color: "secondary" };
+      return { label: "Đang đóng gói", color: "secondary" };
     case "SHIPPING":
       return { label: "Đang giao", color: "primary" };
     case "DELIVERED":
@@ -103,6 +113,24 @@ const getPaymentStatusConfig = (status) => {
 };
 
 const OrderManagementPage = () => {
+  const permissions = usePermissions();
+  const { hasAnyPermission, isAdminUser, isSalesUser, isWarehouseUser } = permissions;
+  const caps = resolveOrderCaps(permissions);
+  const {
+    isFullAdmin,
+    canUpdatePayment,
+    canHideOrders,
+    canClickStatusChip,
+    salesQuickActions,
+  } = caps;
+  const canEditDelivery = hasAnyPermission(["ORDER_EDIT_DELIVERY", "ORDER_CONFIRM"]);
+  const orderStatusCaps = {
+    isFullAdmin: caps.isFullAdmin,
+    canWarehouseFulfill: caps.canWarehouseFulfill,
+    canSalesOps: caps.canSalesOps,
+    canCancel: caps.canCancel,
+  };
+
   // ─── States ───
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -121,6 +149,8 @@ const OrderManagementPage = () => {
   // Dialogs
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [deliveryEditOpen, setDeliveryEditOpen] = useState(false);
+  const [deliveryEditOrder, setDeliveryEditOrder] = useState(null);
 
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusForm, setStatusForm] = useState({
@@ -197,6 +227,29 @@ const OrderManagementPage = () => {
     setSnackbar({ open: true, message: msg, severity: sev });
   };
 
+  const openStatusDialog = (order, nextStatus) => {
+    setStatusForm({
+      id: order.id,
+      orderCode: order.orderCode,
+      currentStatus: order.status,
+      status: nextStatus,
+      trackingCode: order.trackingCode || "",
+      adminNote: order.adminNote || "",
+      cancelReason: "",
+    });
+    setStatusDialogOpen(true);
+  };
+
+  const handleSalesConfirm = (order) => {
+    if (order.status !== "PENDING") return;
+    openStatusDialog(order, "CONFIRMED");
+  };
+
+  const handleSalesCancel = (order) => {
+    if (!["PENDING", "CONFIRMED"].includes(order.status)) return;
+    openStatusDialog(order, "CANCELLED");
+  };
+
   const handleUpdateStatusSubmit = async () => {
     try {
       await adminUpdateOrderStatus(statusForm.id, {
@@ -246,20 +299,28 @@ const OrderManagementPage = () => {
               {isTrashView ? "🗑️ Thùng Rác Đơn Hàng" : "📦 Quản Lý Đơn Hàng"}
             </Typography>
             <Typography variant="body2" color="text.secondary" fontWeight={600} sx={{ opacity: 0.8 }}>
-              {isTrashView ? "Các đơn hàng đã bị ẩn khỏi hệ thống" : "Theo dõi và quản lý tất cả đơn hàng từ khách hàng"}
+              {isTrashView
+                ? "Các đơn hàng đã bị ẩn khỏi hệ thống"
+                : isSalesUser
+                  ? "Chỉ hiển thị đơn được gán cho bạn — xác nhận / hủy / sửa giao hàng (PENDING, CONFIRMED)"
+                  : isWarehouseUser
+                    ? "Kho: đóng gói → giao → hoàn tất"
+                    : "Theo dõi và quản lý tất cả đơn hàng từ khách hàng"}
             </Typography>
           </Box>
-          <Button
-            variant={isTrashView ? "contained" : "outlined"}
-            color="error"
-            startIcon={isTrashView ? <RestoreIcon /> : <TrashIcon />}
-            onClick={() => {
-              setIsTrashView(!isTrashView);
-              setPage(0);
-            }}
-          >
-            {isTrashView ? "Quay lại danh sách chính" : "Xem thùng rác"}
-          </Button>
+          {canHideOrders && (
+            <Button
+              variant={isTrashView ? "contained" : "outlined"}
+              color="error"
+              startIcon={isTrashView ? <RestoreIcon /> : <TrashIcon />}
+              onClick={() => {
+                setIsTrashView(!isTrashView);
+                setPage(0);
+              }}
+            >
+              {isTrashView ? "Quay lại danh sách chính" : "Xem thùng rác"}
+            </Button>
+          )}
         </Box>
 
         {/* Toolbar & Filters */}
@@ -383,32 +444,54 @@ const OrderManagementPage = () => {
                             label={payConf.label}
                             size="small"
                             color={payConf.color || "default"}
-                            onClick={() => {
-                              setPaymentForm({ id: order.id, paymentStatus: order.paymentStatus });
-                              setPaymentDialogOpen(true);
+                            onClick={
+                              canUpdatePayment
+                                ? () => {
+                                    setPaymentForm({ id: order.id, paymentStatus: order.paymentStatus });
+                                    setPaymentDialogOpen(true);
+                                  }
+                                : undefined
+                            }
+                            sx={{
+                              cursor: canUpdatePayment ? "pointer" : "default",
+                              ...payConf.sx,
                             }}
-                            sx={{ cursor: "pointer", ...payConf.sx }}
                           />
                         </TableCell>
                         <TableCell align="center">
-                          <Chip
-                            label={stConf.label}
-                            size="small"
-                            color={stConf.color || "default"}
-                            onClick={() => {
-                              setStatusForm({
-                                id: order.id,
-                                orderCode: order.orderCode,
-                                currentStatus: order.status,
-                                status: order.status, // default new status
-                                trackingCode: order.trackingCode || "",
-                                adminNote: order.adminNote || "",
-                                cancelReason: "",
-                              });
-                              setStatusDialogOpen(true);
-                            }}
-                            sx={{ cursor: "pointer", ...stConf.sx }}
-                          />
+                          <Tooltip
+                            title={
+                              salesQuickActions
+                                ? "Sales: dùng nút Xác nhận / Hủy bên cạnh — không đổi trạng thái tùy ý"
+                                : canClickStatusChip &&
+                                    getAllowedNextStatuses(order.status, orderStatusCaps).length > 0
+                                  ? "Cập nhật trạng thái"
+                                  : ""
+                            }
+                          >
+                            <Chip
+                              label={stConf.label}
+                              size="small"
+                              color={stConf.color || "default"}
+                              onClick={
+                                canClickStatusChip &&
+                                getAllowedNextStatuses(order.status, orderStatusCaps).length > 0
+                                  ? () => {
+                                      const next = getAllowedNextStatuses(order.status, orderStatusCaps);
+                                      openStatusDialog(order, next[0] || order.status);
+                                    }
+                                  : undefined
+                              }
+                              sx={{
+                                cursor:
+                                  canClickStatusChip &&
+                                  getAllowedNextStatuses(order.status, orderStatusCaps).length > 0
+                                    ? "pointer"
+                                    : "default",
+                                ...stConf.sx,
+                              }}
+                            />
+                          </Tooltip>
                         </TableCell>
                         <TableCell align="center">
                           <IconButton
@@ -420,13 +503,58 @@ const OrderManagementPage = () => {
                           >
                             <ViewIcon fontSize="small" />
                           </IconButton>
-                          <IconButton
-                            size="small" color={isTrashView ? "success" : "error"}
-                            title={isTrashView ? "Khôi phục" : "Ẩn đơn hàng"}
-                            onClick={() => handleToggleVisibility(order.id, order.isHidden || isTrashView)}
-                          >
-                            {isTrashView ? <RestoreIcon fontSize="small" /> : <TrashIcon fontSize="small" />}
-                          </IconButton>
+                          {salesQuickActions && order.status === "PENDING" && (
+                            <Tooltip title="Xác nhận đơn (Sales)">
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => handleSalesConfirm(order)}
+                              >
+                                <CheckIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          {salesQuickActions &&
+                            ["PENDING", "CONFIRMED"].includes(order.status) && (
+                            <Tooltip title="Hủy đơn (Sales)">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleSalesCancel(order)}
+                              >
+                                <CancelOrderIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          {canEditDelivery &&
+                            (isFullAdmin || canSalesEditDelivery(order.status)) && (
+                            <IconButton
+                              size="small"
+                              color="secondary"
+                              title="Sửa giao hàng / ghi chú"
+                              onClick={async () => {
+                                try {
+                                  const detail = await adminGetOrderDetail(order.id);
+                                  setDeliveryEditOrder(detail);
+                                  setDeliveryEditOpen(true);
+                                } catch {
+                                  showSnackbar("Không tải được chi tiết đơn", "error");
+                                }
+                              }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                          {canHideOrders && (
+                            <IconButton
+                              size="small"
+                              color={isTrashView ? "success" : "error"}
+                              title={isTrashView ? "Khôi phục" : "Ẩn đơn hàng"}
+                              onClick={() => handleToggleVisibility(order.id, order.isHidden || isTrashView)}
+                            >
+                              {isTrashView ? <RestoreIcon fontSize="small" /> : <TrashIcon fontSize="small" />}
+                            </IconButton>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -475,9 +603,29 @@ const OrderManagementPage = () => {
         onClose={() => setDetailOpen(false)}
       />
 
+      <SalesDeliveryEditDialog
+        open={deliveryEditOpen}
+        order={deliveryEditOrder}
+        onClose={() => {
+          setDeliveryEditOpen(false);
+          setDeliveryEditOrder(null);
+        }}
+        onSaved={() => {
+          showSnackbar("Đã cập nhật thông tin giao hàng");
+          loadOrders();
+        }}
+      />
+
       {/* Dialog Cập Nhật Trạng Thái Đơn */}
       <Dialog open={statusDialogOpen} onClose={() => setStatusDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Cập Nhật Tiền Trình: {statusForm.orderCode}</DialogTitle>
+        <DialogTitle>
+          {statusForm.status === "CONFIRMED"
+            ? "Xác nhận đơn"
+            : statusForm.status === "CANCELLED"
+              ? "Hủy đơn"
+              : "Cập nhật tiến trình"}
+          : {statusForm.orderCode}
+        </DialogTitle>
         <DialogContent dividers>
           <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
             <FormControl fullWidth>
@@ -489,17 +637,7 @@ const OrderManagementPage = () => {
               >
                 {(() => {
                   const currentStatus = statusForm.currentStatus;
-                  const validNext = {
-                    PENDING: ["CONFIRMED", "CANCELLED"],
-                    CONFIRMED: ["PROCESSING", "CANCELLED"],
-                    PROCESSING: ["SHIPPING", "CANCELLED"],
-                    SHIPPING: ["DELIVERED", "CANCELLED"],
-                    DELIVERED: ["COMPLETED", "REFUNDED", "CANCELLED"],
-                    CANCELLED: ["REFUNDED"],
-                    COMPLETED: [],
-                    REFUNDED: []
-                  };
-                  const allowed = validNext[currentStatus] || [];
+                  const allowed = getAllowedNextStatuses(currentStatus, orderStatusCaps);
                   const options = ORDER_STATUS_TABS.filter(t => t.value !== "ALL" && allowed.includes(t.value));
                   
                   // Always include the current status itself so the placeholder works when nothing is changed yet

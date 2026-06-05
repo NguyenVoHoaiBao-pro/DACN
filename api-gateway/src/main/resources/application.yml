@@ -65,7 +65,7 @@ spring:
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/api/users/**, /api/wishlist/**, /api/addresses/**, /api/admin/users/**
+            - Path=/api/users/**, /api/wishlist/**, /api/addresses/**, /api/admin/users/**, /api/live-chat/**, /api/admin/live-chat/**
 
         - id: cart-service
           uri: lb://cart-service
@@ -75,17 +75,27 @@ spring:
         - id: catalog-service
           uri: lb://catalog-service
           predicates:
-            - Path=/api/products/**, /api/categories/**, /api/producers/**, /api/admin/products/**, /api/admin/inventory/**, /api/admin/suppliers/**, /api/admin/purchase-orders/**, /api/admin/categories/**, /api/admin/producers/**, /api/admin/attributes/**, /api/admin/attribute-values/**, /api/admin/banners/**, /api/admin/posts/**, /img/**
+            - Path=/api/products/**, /api/categories/**, /api/producers/**, /api/admin/products/**, /api/admin/sales-consultation/**, /api/admin/inventory/**, /api/admin/suppliers/**, /api/admin/purchase-orders/**, /api/admin/categories/**, /api/admin/producers/**, /api/admin/attributes/**, /api/admin/attribute-values/**, /api/admin/banners/**, /api/admin/posts/**, /img/**
 
         - id: order-service
           uri: lb://order-service
           predicates:
-            - Path=/api/orders/**, /api/admin/orders/**, /api/admin/warranty/**, /api/public/warranty/**, /api/payments/**, /api/payment/**, /api/ghn/**, /api/shipping/**, /api/coupons/**, /api/admin/coupons/**
+            - Path=/api/orders/**, /api/admin/orders/**, /api/admin/sales/**, /api/admin/warranty/**, /api/warranty/**, /api/public/warranty/**, /api/payments/**, /api/payment/**, /api/ghn/**, /api/shipping/**, /api/coupons/**, /api/admin/coupons/**
 
         - id: review-service
           uri: lb://review-service
           predicates:
             - Path=/api/reviews/**, /api/admin/reviews/**
+
+        - id: chatbot-service
+          uri: lb://chatbot-service
+          predicates:
+            - Path=/api/chatbot/**
+
+        - id: reco-service
+          uri: lb://reco-service
+          predicates:
+            - Path=/recommend/**, /api/recommend
 
         - id: statistics-service
           uri: lb://statistics-service

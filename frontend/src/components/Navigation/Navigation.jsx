@@ -35,6 +35,7 @@ const Navigation = () => {
         { name: "Tra Cứu Bảo Hành", path: "/warranty-check" },
         { name: "Hỏi Đáp", path: "/faq" },
         { name: "Tin Tức", path: "/blog" },
+        { name: "Chat Với Nhân Viên", path: "/chat-nhan-vien" },
         { name: "Điều Khoản", path: "/terms" },
       ],
     },

@@ -51,6 +51,7 @@ import {
   Cancel as CancelIcon,
 } from "@mui/icons-material";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   adminGetProductDetail,
   adminUpdateProduct,
@@ -66,6 +67,8 @@ import { toast } from "react-toastify";
 const AdminProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isSalesUser, hasPermission } = usePermissions();
+  const readOnlyCatalog = isSalesUser && !hasPermission("PRODUCT_MANAGE");
   const [tabIndex, setTabIndex] = useState(0);
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -212,16 +215,18 @@ const AdminProductDetailPage = () => {
                   Huỷ
                 </Button>
               )}
-              <Button
-                startIcon={editMode ? (saving ? <CircularProgress size={18} /> : <SaveIcon />) : <EditIcon />}
-                variant={editMode ? "contained" : "outlined"}
-                onClick={() => (editMode ? handleUpdate() : setEditMode(true))}
-                color={editMode ? "success" : "primary"}
-                disabled={saving}
-                sx={{ textTransform: "none" }}
-              >
-                {editMode ? (saving ? "Đang lưu..." : "Lưu thay đổi") : "Chỉnh sửa"}
-              </Button>
+              {!readOnlyCatalog && (
+                <Button
+                  startIcon={editMode ? (saving ? <CircularProgress size={18} /> : <SaveIcon />) : <EditIcon />}
+                  variant={editMode ? "contained" : "outlined"}
+                  onClick={() => (editMode ? handleUpdate() : setEditMode(true))}
+                  color={editMode ? "success" : "primary"}
+                  disabled={saving}
+                  sx={{ textTransform: "none" }}
+                >
+                  {editMode ? (saving ? "Đang lưu..." : "Lưu thay đổi") : "Chỉnh sửa"}
+                </Button>
+              )}
             </Box>
           </Box>
 
@@ -321,6 +326,26 @@ const AdminProductDetailPage = () => {
                     </Paper>
                   )}
                 </Box>
+                {readOnlyCatalog && product?.specifications?.length > 0 && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1, color: "text.secondary" }}>
+                      Thông số kỹ thuật
+                    </Typography>
+                    <Grid container spacing={1}>
+                      {product.specifications.map((s) => (
+                        <Grid item xs={12} sm={6} key={`${s.code}-${s.value}`}>
+                          <Typography variant="caption" color="text.secondary">
+                            {s.name}
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {s.value}
+                            {s.unit ? ` ${s.unit}` : ""}
+                          </Typography>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
               </Stack>
             </Grid>
           </Grid>
@@ -428,19 +453,21 @@ const AdminProductDetailPage = () => {
       <Box>
         <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
           <Typography variant="h6" fontWeight="bold">Danh sách biến thể</Typography>
-          <Button
-            startIcon={<AddIcon />}
-            variant="contained"
-            onClick={() => setVariantModal({ open: true, mode: "add", data: null })}
-            sx={{
-              textTransform: "none",
-              borderRadius: "10px",
-              bgcolor: "#3182ce",
-              "&:hover": { bgcolor: "#2b6cb0" },
-            }}
-          >
-            Thêm biến thể
-          </Button>
+          {!readOnlyCatalog && (
+            <Button
+              startIcon={<AddIcon />}
+              variant="contained"
+              onClick={() => setVariantModal({ open: true, mode: "add", data: null })}
+              sx={{
+                textTransform: "none",
+                borderRadius: "10px",
+                bgcolor: "#3182ce",
+                "&:hover": { bgcolor: "#2b6cb0" },
+              }}
+            >
+              Thêm biến thể
+            </Button>
+          )}
         </Box>
 
         {(!product?.variants || product.variants.length === 0) ? (
@@ -456,8 +483,13 @@ const AdminProductDetailPage = () => {
                 <TableRow>
                   <TableCell sx={{ fontWeight: "bold" }}>SKU</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Tên biến thể</TableCell>
+                  {readOnlyCatalog && (
+                    <TableCell sx={{ fontWeight: "bold" }}>Cấu hình</TableCell>
+                  )}
                   <TableCell sx={{ fontWeight: "bold" }}>Giá bán</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }} align="center">Tồn kho</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }} align="center">
+                    {readOnlyCatalog ? "Sẵn bán" : "Tồn kho"}
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }} align="center">Mặc định</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }} align="center">Trạng thái</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }} align="center">Thao tác</TableCell>
@@ -474,6 +506,21 @@ const AdminProductDetailPage = () => {
                     <TableCell>
                       <Typography fontWeight="medium">{v.variantName}</Typography>
                     </TableCell>
+                    {readOnlyCatalog && (
+                      <TableCell>
+                        <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                          {(v.attributeValues || []).map((a) => (
+                            <Chip
+                              key={a.id}
+                              label={`${a.attributeName}: ${a.value}`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ))}
+                          {!v.attributeValues?.length && "—"}
+                        </Stack>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
                         {formatPrice(v.price)}
@@ -488,12 +535,21 @@ const AdminProductDetailPage = () => {
                       <Typography
                         variant="body2"
                         sx={{
-                          color: v.stockQuantity === 0 ? "error.main" : v.stockQuantity <= 10 ? "warning.main" : "text.primary",
-                          fontWeight: v.stockQuantity <= 10 ? "bold" : "normal",
+                          color: (readOnlyCatalog ? v.availableQuantity : v.stockQuantity) === 0
+                            ? "error.main"
+                            : (readOnlyCatalog ? v.availableQuantity : v.stockQuantity) <= 10
+                              ? "warning.main"
+                              : "text.primary",
+                          fontWeight: (readOnlyCatalog ? v.availableQuantity : v.stockQuantity) <= 10 ? "bold" : "normal",
                         }}
                       >
-                        {v.stockQuantity}
+                        {readOnlyCatalog ? (v.availableQuantity ?? 0) : v.stockQuantity}
                       </Typography>
+                      {readOnlyCatalog && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Kho: {v.stockQuantity ?? 0}
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell align="center">
                       {v.isDefault ? <Chip label="Mặc định" size="small" color="primary" /> : "—"}
@@ -507,24 +563,28 @@ const AdminProductDetailPage = () => {
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <Stack direction="row" spacing={0.5} justifyContent="center">
-                        <Tooltip title="Chỉnh sửa">
-                          <IconButton size="small" color="primary" onClick={() => setVariantModal({ open: true, mode: "edit", data: v })}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        {v.isActive && (
-                          <Tooltip title="Ngưng bán (Vô hiệu hóa)">
-                            <IconButton
-                              size="small"
-                              color="warning"
-                              onClick={() => setDeleteVariantDialog({ open: true, variantId: v.id, variantName: v.variantName })}
-                            >
-                              <DeleteIcon fontSize="small" />
+                      {!readOnlyCatalog ? (
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          <Tooltip title="Chỉnh sửa">
+                            <IconButton size="small" color="primary" onClick={() => setVariantModal({ open: true, mode: "edit", data: v })}>
+                              <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                        )}
-                      </Stack>
+                          {v.isActive && (
+                            <Tooltip title="Ngưng bán (Vô hiệu hóa)">
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                onClick={() => setDeleteVariantDialog({ open: true, variantId: v.id, variantName: v.variantName })}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -754,19 +814,21 @@ const AdminProductDetailPage = () => {
       <Box>
         <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
           <Typography variant="h6" fontWeight="bold">Hình ảnh sản phẩm</Typography>
-          <Button
-            startIcon={<PhotoCameraIcon />}
-            variant="contained"
-            onClick={() => setImageModal({ open: true })}
-            sx={{
-              textTransform: "none",
-              borderRadius: "10px",
-              bgcolor: "#3182ce",
-              "&:hover": { bgcolor: "#2b6cb0" },
-            }}
-          >
-            Thêm hình ảnh URL
-          </Button>
+          {!readOnlyCatalog && (
+            <Button
+              startIcon={<PhotoCameraIcon />}
+              variant="contained"
+              onClick={() => setImageModal({ open: true })}
+              sx={{
+                textTransform: "none",
+                borderRadius: "10px",
+                bgcolor: "#3182ce",
+                "&:hover": { bgcolor: "#2b6cb0" },
+              }}
+            >
+              Thêm hình ảnh URL
+            </Button>
+          )}
         </Box>
 
         <Grid container spacing={3}>
@@ -811,15 +873,17 @@ const AdminProductDetailPage = () => {
                       />
                     )}
                   </Box>
-                  <Tooltip title="Xoá ảnh vĩnh viễn">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => setDeleteImageDialog({ open: true, imageId: img.id })}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {!readOnlyCatalog && (
+                    <Tooltip title="Xoá ảnh vĩnh viễn">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => setDeleteImageDialog({ open: true, imageId: img.id })}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </CardContent>
               </Card>
             </Grid>
@@ -922,7 +986,7 @@ const AdminProductDetailPage = () => {
   }
 
   return (
-    <AdminLayout currentPage="Sản phẩm">
+    <AdminLayout currentPage={readOnlyCatalog ? "Tra cứu sản phẩm" : "Sản phẩm"}>
       <Box sx={{ p: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -931,6 +995,13 @@ const AdminProductDetailPage = () => {
         >
           Quay lại danh sách
         </Button>
+
+        {readOnlyCatalog && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Chế độ tra cứu — xem cấu hình, tồn <strong>sẵn bán</strong> (IMEI AVAILABLE) và BH:{" "}
+            <strong>{product?.warrantyPolicy || "12 tháng"}</strong>.
+          </Alert>
+        )}
 
         {/* Product Header */}
         <Box sx={{ mb: 4, display: "flex", alignItems: "center", gap: 3 }}>

@@ -40,7 +40,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { selectIsLoggedIn } from "../../redux/appSlice";
 import { fetchCart } from "../../services/cartService";
 import {
@@ -50,6 +50,8 @@ import {
 import { formatMoney } from "../../utils/formatters";
 import { useGHNShipping } from "../../hooks/useGHNShipping";
 import CouponSelector from "./CouponSelector";
+
+const SALES_REF_KEY = "electro_sales_ref";
 
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -141,7 +143,23 @@ const ShippingInfoBox = ({ shippingInfo, loading }) => {
 // ─── Main Component ───────────────────────────────────────────────────────────
 const Checkout = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isLoggedIn = useSelector(selectIsLoggedIn);
+  const [salesRef, setSalesRef] = useState(null);
+
+  useEffect(() => {
+    const refParam = searchParams.get("ref");
+    if (refParam && !Number.isNaN(Number(refParam))) {
+      const id = Number(refParam);
+      localStorage.setItem(SALES_REF_KEY, String(id));
+      setSalesRef(id);
+      return;
+    }
+    const stored = localStorage.getItem(SALES_REF_KEY);
+    if (stored && !Number.isNaN(Number(stored))) {
+      setSalesRef(Number(stored));
+    }
+  }, [searchParams]);
 
   // ─── State ───
   const [cartItems, setCartItems] = useState([]);
@@ -311,6 +329,10 @@ const Checkout = () => {
       if (selectedDistrict && selectedWard) {
         request.toDistrictId = selectedDistrict.id;     // integer
         request.toWardCode = selectedWard.code;       // String!
+      }
+
+      if (salesRef) {
+        request.salesRef = salesRef;
       }
 
       const order = await checkout(request);

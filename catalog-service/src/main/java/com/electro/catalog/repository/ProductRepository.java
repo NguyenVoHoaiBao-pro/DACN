@@ -94,19 +94,23 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
             countQuery = "SELECT COUNT(p) FROM Product p")
     Page<Product> findAllProducts(Pageable pageable);
 
-    /** Tìm kiếm sản phẩm (admin) — tìm theo keyword trên name/description, lọc isActive */
-    @Query(value = "SELECT p FROM Product p " +
+    /** Tìm kiếm sản phẩm (admin / Sales) — name, description hoặc SKU biến thể */
+    @Query(value = "SELECT DISTINCT p FROM Product p " +
             "LEFT JOIN FETCH p.images " +
             "JOIN FETCH p.productType " +
             "JOIN FETCH p.producer " +
+            "LEFT JOIN p.variants v " +
             "WHERE (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "       OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+            "       OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "       OR LOWER(v.skuCode) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "AND (:isActive IS NULL OR p.isActive = :isActive) " +
             "AND (:productTypeId IS NULL OR p.productType.id = :productTypeId) " +
             "AND (:producerId IS NULL OR p.producer.id = :producerId)",
-            countQuery = "SELECT COUNT(p) FROM Product p " +
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Product p " +
+            "LEFT JOIN p.variants v " +
             "WHERE (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-            "       OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+            "       OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "       OR LOWER(v.skuCode) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "AND (:isActive IS NULL OR p.isActive = :isActive) " +
             "AND (:productTypeId IS NULL OR p.productType.id = :productTypeId) " +
             "AND (:producerId IS NULL OR p.producer.id = :producerId)")

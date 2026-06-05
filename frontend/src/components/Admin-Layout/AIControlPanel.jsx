@@ -25,25 +25,24 @@ const AIControlPanel = () => {
     const [retrainSuccess, setRetrainSuccess] = useState(null);
 
     const { hasPermission } = usePermissions();
-    // ROLE_PERM_EDIT is an exclusive admin permission configured in our RBAC DB
     const canManageAI = hasPermission("ROLE_PERM_EDIT");
 
-    // Lấy trạng thái model hiện tại
     const fetchModelStatus = useCallback(async () => {
+        if (!canManageAI) return;
         try {
             const res = await axios.get(`${AI_SERVICE_URL}/api/model-status`);
             setModelStatus(res.data);
         } catch {
             setModelStatus(null);
         }
-    }, []);
+    }, [canManageAI]);
 
     useEffect(() => {
+        if (!canManageAI) return undefined;
         fetchModelStatus();
-        // Refresh chậm hơn — AI service (port 5000) là tùy chọn, không ảnh hưởng dashboard
         const interval = setInterval(fetchModelStatus, 30000);
         return () => clearInterval(interval);
-    }, [fetchModelStatus]);
+    }, [fetchModelStatus, canManageAI]);
 
     // Bấm nút Cập nhật AI
     const handleRetrain = async () => {

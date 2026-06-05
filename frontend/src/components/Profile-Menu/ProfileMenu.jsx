@@ -7,6 +7,7 @@ import {
   NotificationsNoneOutlined as NotificationsNoneOutlinedIcon,
   PaymentOutlined as PaymentOutlinedIcon,
   PersonOutline as PersonOutlineIcon,
+  ShieldOutlined as ShieldOutlinedIcon,
 } from "@mui/icons-material";
 import {
   Avatar,
@@ -122,6 +123,18 @@ const ProfileMenu = ({ activePage, user }) => {
               <DescriptionOutlinedIcon />
             </ListItemIcon>
             <ListItemText primary="Đơn Mua" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={activePage === "Bảo Hành"}
+            onClick={() => navigate("/user/warranty")}
+          >
+            <ListItemIcon sx={{ minWidth: 40, color: "#7c3aed" }}>
+              <ShieldOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary="Bảo Hành" />
           </ListItemButton>
         </ListItem>
 

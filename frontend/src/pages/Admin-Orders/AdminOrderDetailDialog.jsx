@@ -34,8 +34,13 @@ import {
   QrCode2 as QrIcon,
   Close as CloseIcon,
   ContentCopy as CopyIcon,
+  LocalShipping as ShipIcon,
 } from "@mui/icons-material";
 import { useEffect, useState } from "react";
+import SalesDeliveryEditDialog from "./SalesDeliveryEditDialog";
+import { canSalesEditDelivery } from "../../utils/orderDeliveryEdit";
+import { usePermissions } from "../../hooks/usePermissions";
+import { resolveOrderCaps } from "../../utils/orderRolePermissions";
 import { toast } from "react-toastify";
 import { adminAssignImei, adminGetOrderDetail } from "../../services/orderService";
 import { formatMoney } from "../../utils/formatters";
@@ -80,10 +85,15 @@ const ImeiStatusBadge = ({ assignedCount, totalCount }) => {
 };
 
 const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
+  const permCtx = usePermissions();
+  const { canAssignImei: canAssignImeiRole, isFullAdmin } = resolveOrderCaps(permCtx);
+  const canEditDelivery = permCtx.hasAnyPermission(["ORDER_EDIT_DELIVERY", "ORDER_CONFIRM"]);
+
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [imeiInputs, setImeiInputs] = useState({});
   const [assigningId, setAssigningId] = useState(null);
+  const [deliveryEditOpen, setDeliveryEditOpen] = useState(false);
 
   useEffect(() => {
     if (open && orderId) {
@@ -157,6 +167,11 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
   const canAssignImeiForOrder =
     order?.status === "CONFIRMED" || order?.status === "PROCESSING";
 
+  const showDeliveryEdit =
+    order &&
+    canEditDelivery &&
+    (isFullAdmin || canSalesEditDelivery(order.status));
+
   return (
     <Dialog
       open={open}
@@ -212,16 +227,35 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
                   Thông tin khách hàng
                 </Typography>
                 <Typography>
-                  <strong>Họ tên:</strong> {order.customerName}
+                  <strong>Tài khoản:</strong> {order.customerName || order.username}
                 </Typography>
                 <Typography>
-                  <strong>Điện thoại:</strong> {order.shippingPhone}
+                  <strong>Người nhận:</strong> {order.shippingName}
+                </Typography>
+                <Typography>
+                  <strong>Điện thoại nhận:</strong> {order.shippingPhone}
                 </Typography>
                 <Typography>
                   <strong>Địa chỉ:</strong> {order.shippingAddress},{" "}
                   {order.shippingWard}, {order.shippingDistrict},{" "}
                   {order.shippingProvince}
                 </Typography>
+                {order.note && (
+                  <Typography sx={{ mt: 1 }}>
+                    <strong>Ghi chú đơn:</strong> {order.note}
+                  </Typography>
+                )}
+                {showDeliveryEdit && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<ShipIcon />}
+                    sx={{ mt: 1 }}
+                    onClick={() => setDeliveryEditOpen(true)}
+                  >
+                    Sửa giao hàng / ghi chú
+                  </Button>
+                )}
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography
@@ -274,7 +308,9 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
 
             {/* ── PRODUCT ITEMS & IMEI ASSIGNMENT ── */}
             <Typography variant="h6" gutterBottom color="primary.main" fontWeight="600">
-              Danh Sách Sản Phẩm & Gán IMEI
+              {canAssignImeiRole
+                ? "Danh Sách Sản Phẩm & Gán IMEI"
+                : "Danh Sách Sản Phẩm"}
             </Typography>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -284,7 +320,8 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
                   : 0;
                 const totalCount = item.quantity;
                 const isFullyAssigned = assignedCount >= totalCount;
-                const canAssignImei = canAssignImeiForOrder && !isFullyAssigned;
+                const canAssignImei =
+                  canAssignImeiRole && canAssignImeiForOrder && !isFullyAssigned;
                 const remaining = totalCount - assignedCount;
 
                 return (
@@ -492,6 +529,16 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
           Đóng
         </Button>
       </DialogActions>
+
+      <SalesDeliveryEditDialog
+        open={deliveryEditOpen}
+        order={order}
+        onClose={() => setDeliveryEditOpen(false)}
+        onSaved={(updated) => {
+          setOrder(updated);
+          toast.success("Đã cập nhật thông tin giao hàng");
+        }}
+      />
     </Dialog>
   );
 };

@@ -204,6 +204,7 @@ function Get-ElectroServices {
         @{ Name = 'order-service';    Port = 8086; Phase = 3; Description = 'Order + Warranty' }
         @{ Name = 'review-service';   Port = 8087; Phase = 3; Description = 'Reviews' }
         @{ Name = 'statistics-service'; Port = 8088; Phase = 3; Description = 'Statistics + Redis' }
+        @{ Name = 'reco-service';       Port = 5003; Phase = 3; Description = 'AI Recommendations (SVD+KNN)'; Runtime = 'python' }
         @{ Name = 'chatbot-service';  Port = 8092; Phase = 3; Description = 'Chatbot RAG + Pinecone' }
         @{ Name = 'api-gateway';      Port = 8080; Phase = 4; Description = 'API Gateway'; WaitAfterSec = 12 }
     )
@@ -217,6 +218,73 @@ function Get-MinimalServiceNames {
     )
 }
 
+function Ensure-RecoServiceVenv {
+    param([string]$ModulePath)
+    $pythonPath = Join-Path $ModulePath '.venv\Scripts\python.exe'
+    $pipPath = Join-Path $ModulePath '.venv\Scripts\pip.exe'
+    $reqPath = Join-Path $ModulePath 'requirements.txt'
+    if (-not (Test-Path $pythonPath)) {
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            throw 'reco-service: can Python 3.10+. Chay: cd reco-service; .\scripts\SETUP_ENV.ps1'
+        }
+        Write-Host '  Tao .venv cho reco-service...' -ForegroundColor Yellow
+        python -m venv (Join-Path $ModulePath '.venv')
+    }
+    $null = & $pythonPath -c "import uvicorn" 2>$null
+    $uvicornOk = $LASTEXITCODE -eq 0
+    if (-not $uvicornOk -and (Test-Path $reqPath)) {
+        Write-Host '  Cai dependencies reco-service (lan dau hoac .venv lo)...' -ForegroundColor Yellow
+        $null = & $pipPath install -r $reqPath -q 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "reco-service: pip install that bai (exit code $LASTEXITCODE). Chay thu: cd reco-service; .\.venv\Scripts\pip.exe install -r requirements.txt"
+        }
+    }
+    return $pythonPath
+}
+
+function Start-RecoService {
+    param(
+        [string]$Root,
+        [hashtable]$Service,
+        [string]$RunDir
+    )
+    $modulePath = Join-Path $Root $Service.Name
+    if (-not (Test-Path (Join-Path $modulePath 'app.py'))) {
+        throw "Khong tim thay reco-service (app.py)"
+    }
+    if (Test-PortOpen -Port $Service.Port) {
+        Write-Host "  Bo qua $($Service.Name) - port $($Service.Port) da mo." -ForegroundColor Yellow
+        return
+    }
+
+    $pythonPath = Ensure-RecoServiceVenv -ModulePath $modulePath
+
+    $logFile = Join-Path $RunDir "$($Service.Name).log"
+    $commonScript = Join-Path $Root 'scripts\_common.ps1'
+    $envFile = Join-Path $Root '.env'
+    $dotenvCmd = ''
+    if (Test-Path $envFile) {
+        $dotenvCmd = @"
+. '$commonScript'
+`$null = Import-DotEnv -Path '$envFile'
+"@
+    }
+    $cmd = @"
+$dotenvCmd
+Set-Location '$modulePath'
+`$env:AI_PORT = '$($Service.Port)'
+`$env:APP_NAME = 'reco-service'
+`$env:EUREKA_SERVER_URL = `$(if (`$env:EUREKA_SERVER_URL) { `$env:EUREKA_SERVER_URL } else { 'http://localhost:8761/eureka/' })
+& '$pythonPath' -m uvicorn app:app --host 0.0.0.0 --port $($Service.Port) 2>&1 | Tee-Object -FilePath '$logFile'
+"@
+
+    Start-Process powershell.exe -WindowStyle Minimized -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $cmd
+    ) | Out-Null
+
+    Write-Host "  Da khoi dong $($Service.Name) (:$($Service.Port)) - log: $logFile" -ForegroundColor Cyan
+}
+
 function Start-ElectroService {
     param(
         [string]$Root,
@@ -224,6 +292,11 @@ function Start-ElectroService {
         [hashtable]$Service,
         [string]$RunDir
     )
+    if ($Service.Runtime -eq 'python') {
+        Start-RecoService -Root $Root -Service $Service -RunDir $RunDir
+        return
+    }
+
     $modulePath = Join-Path $Root $Service.Name
     if (-not (Test-Path (Join-Path $modulePath 'pom.xml'))) {
         throw "Khong tim thay module: $($Service.Name)"
@@ -241,13 +314,16 @@ function Start-ElectroService {
     if (Test-Path $envFile) {
         $dotenvCmd = @"
 . '$commonScript'
-Import-DotEnv -Path '$envFile'
+`$null = Import-DotEnv -Path '$envFile'
 "@
     }
     $cmd = @"
 $dotenvCmd
 Set-Location '$modulePath'
 `$env:JAVA_TOOL_OPTIONS = '$javaOpts'
+# clean compile: xoa .class loi do IDE (Eclipse JDT) ghi de len target/classes
+& '$Maven' clean compile -DskipTests -q
+if (`$LASTEXITCODE -ne 0) { throw "Build $($Service.Name) that bai (mvn clean compile)" }
 & '$Maven' spring-boot:run -q 2>&1 | Tee-Object -FilePath '$logFile'
 "@
 

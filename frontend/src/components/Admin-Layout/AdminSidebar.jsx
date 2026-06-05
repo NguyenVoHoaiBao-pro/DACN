@@ -7,10 +7,14 @@ import {
   Inventory as InventoryIcon,
   ShoppingCart as OrdersIcon,
   People as PeopleIcon,
+  ContactPage as CustomerProfileIcon,
   Settings as SettingsIcon,
   Store as StoreIcon,
   Warehouse as WarehouseIcon,
   Shield as ShieldIcon,
+  Assignment as WarrantyClaimIcon,
+  Forum as ForumIcon,
+  ViewKanban as KanbanIcon,
   QrCode2 as QrCodeIcon,
   AssignmentReturn as ReturnIcon,
   Style as StyleIcon,
@@ -18,6 +22,7 @@ import {
   Business as BusinessIcon,
   RateReview as ReviewIcon,
 } from "@mui/icons-material";
+import { cloneElement } from "react";
 
 
 import {
@@ -38,23 +43,29 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
   const { hasAnyPermission } = usePermissions();
 
   const allMenuItems = [
-    { text: "Dashboard", icon: <DashboardIcon />, path: "/admin", req: [] }, // Hiển thị chung
-    { text: "Sản phẩm", icon: <InventoryIcon />, path: "/admin/products", req: ["PRODUCT_VIEW", "PRODUCT_CREATE"] },
+    { text: "Dashboard", icon: <DashboardIcon />, path: "/admin", req: ["REPORT_REVENUE", "REPORT_SALES", "ORDER_VIEW_ALL"] },
+    { text: "Sản phẩm", icon: <InventoryIcon />, path: "/admin/products", req: ["PRODUCT_VIEW", "PRODUCT_CREATE", "PRODUCT_MANAGE"] },
     { text: "Danh mục", icon: <CategoryIcon />, path: "/admin/categories", req: ["CATEGORY_VIEW"] },
     { text: "Thuộc tính", icon: <StyleIcon />, path: "/admin/attributes", req: ["CATEGORY_VIEW"] },
     { text: "Đơn hàng", icon: <OrdersIcon />, path: "/admin/orders", req: ["ORDER_VIEW_ALL"] },
-    { text: "Tồn kho", icon: <WarehouseIcon />, path: "/admin/inventory", req: ["INVENTORY_STAT", "STOCK_IMPORT"] },
-    { text: "Người dùng", icon: <PeopleIcon />, path: "/admin/users", req: ["USER_MANAGE", "CUSTOMER_VIEW"] },
+    { text: "Chat đa kênh", icon: <ForumIcon />, path: "/admin/sales/chat", req: ["ORDER_VIEW_ALL", "CUSTOMER_VIEW"] },
+    { text: "Pipeline & HH", icon: <KanbanIcon />, path: "/admin/sales/pipeline", req: ["ORDER_VIEW_ALL", "REPORT_SALES"] },
+    { text: "Cấu hình KPI", icon: <KanbanIcon />, path: "/admin/sales/kpi-config", req: ["USER_MANAGE"] },
+    { text: "Tồn kho", icon: <WarehouseIcon />, path: "/admin/inventory", req: ["INVENTORY_STAT"] },
+    { text: "Hồ sơ khách hàng", icon: <CustomerProfileIcon />, path: "/admin/customers", req: ["CUSTOMER_VIEW"] },
+    { text: "Người dùng", icon: <PeopleIcon />, path: "/admin/users", req: ["USER_MANAGE"] },
     { text: "Banner", icon: <BannerIcon />, path: "/admin/banners", req: ["BANNER_MANAGE"] },
     { text: "Bài viết", icon: <ArticleIcon />, path: "/admin/posts", req: ["POST_MANAGE"] },
     { text: "Bảo hành", icon: <ShieldIcon />, path: "/admin/warranty", req: ["WARRANTY_MANAGE"] },
+    { text: "Yêu cầu BH online", icon: <WarrantyClaimIcon />, path: "/admin/warranty-claims", req: ["WARRANTY_MANAGE", "CUSTOMER_VIEW"] },
     { text: "Nhập IMEI", icon: <QrCodeIcon />, path: "/admin/imei", req: ["IMEI_MANAGE"] },
     { text: "Trả hàng", icon: <ReturnIcon />, path: "/admin/return", req: ["STOCK_RETURN"] },
+    { text: "Tiếp nhận BH", icon: <WarrantyClaimIcon />, path: "/admin/warranty-inbound", req: ["STOCK_IMPORT", "IMEI_MANAGE"] },
     { text: "Mã giảm giá", icon: <CouponIcon />, path: "/admin/coupons", req: ["PRODUCT_MANAGE"] },
     { text: "Thương hiệu", icon: <BusinessIcon />, path: "/admin/producers", req: ["PRODUCT_MANAGE"] },
     { text: "Đánh giá", icon: <ReviewIcon />, path: "/admin/reviews", req: ["PRODUCT_MANAGE"] },
 
-    { text: "Thống kê", icon: <AnalyticsIcon />, path: "/admin/analytics", req: [] },
+    { text: "Thống kê", icon: <AnalyticsIcon />, path: "/admin/analytics", req: ["REPORT_REVENUE"] },
 
     { text: "Cài đặt", icon: <SettingsIcon />, path: "/admin/settings", req: ["ROLE_PERM_EDIT"] },
   ];
@@ -141,9 +152,11 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
               onClick={() => handleNavigation(item.path)}
               sx={{
                 borderRadius: 2,
-                minHeight: collapsed ? 36 : 44, // 🔥 GIẢM min height
-                justifyContent: collapsed ? "center" : "initial",
+                minHeight: collapsed ? 40 : 48,
+                justifyContent: collapsed ? "center" : "flex-start",
+                alignItems: "center",
                 px: collapsed ? 1 : 2,
+                py: collapsed ? 0.75 : 1,
                 transition: "all 0.3s ease",
                 "&.Mui-selected": {
                   backgroundColor: "#f0f0f0",
@@ -159,74 +172,32 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
             >
               <ListItemIcon
                 sx={{
-                  minWidth: collapsed ? 0 : 36, // 🔥 GIẢM min width
-                  mr: collapsed ? 0 : 1,
+                  minWidth: collapsed ? 0 : 40,
+                  width: collapsed ? "auto" : 40,
+                  mr: collapsed ? 0 : 0,
                   justifyContent: "center",
+                  alignItems: "center",
                   color: "#666",
                   transition: "all 0.3s ease",
+                  "& .MuiSvgIcon-root": {
+                    fontSize: collapsed ? 20 : 22,
+                  },
                 }}
               >
-                {item.text === "Dashboard" && (
-                  <DashboardIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Sản phẩm" && (
-                  <InventoryIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Danh mục" && (
-                  <CategoryIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Thuộc tính" && (
-                  <StyleIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Đơn hàng" && (
-                  <OrdersIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Tồn kho" && (
-                  <WarehouseIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Người dùng" && (
-                  <PeopleIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Banner" && (
-                  <BannerIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Bài viết" && (
-                  <ArticleIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Bảo hành" && (
-                  <ShieldIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Nhập IMEI" && (
-                  <QrCodeIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Trả hàng" && (
-                  <ReturnIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Mã giảm giá" && (
-                  <CouponIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Thương hiệu" && (
-                  <BusinessIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Đánh giá" && (
-                  <ReviewIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-
-                {item.text === "Thống kê" && (
-
-                  <AnalyticsIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
-                {item.text === "Cài đặt" && (
-                  <SettingsIcon sx={{ fontSize: collapsed ? 18 : 20 }} />
-                )}
+                {cloneElement(item.icon, {
+                  sx: { fontSize: collapsed ? 20 : 22, display: "block" },
+                })}
               </ListItemIcon>
               {!collapsed && (
                 <ListItemText
                   primary={item.text}
+                  sx={{ my: 0 }}
                   primaryTypographyProps={{
                     fontWeight: currentPage === item.text ? 600 : 400,
                     color: "#333",
-                    fontSize: "0.9rem", // 🔥 GIẢM font size
+                    fontSize: "0.9rem",
+                    lineHeight: 1.25,
+                    noWrap: true,
                   }}
                 />
               )}

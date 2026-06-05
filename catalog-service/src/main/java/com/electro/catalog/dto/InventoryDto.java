@@ -55,6 +55,9 @@ public class InventoryDto {
         private String reason;
         private java.time.LocalDateTime createdAt;
         private Integer variantId;
+        private String skuCode;
+        private String productName;
+        private String variantName;
         private Integer productItemId;
         private String imei;
         private Integer userId;
@@ -65,6 +68,7 @@ public class InventoryDto {
     public static class InventoryStat {
         private Integer variantId;
         private String skuCode;
+        private String productName;
         private String variantName;
         private Integer stockQuantity;
         private Integer lowStockThreshold;

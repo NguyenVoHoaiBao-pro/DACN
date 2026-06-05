@@ -4,6 +4,7 @@ import { Search, NotificationsNone, Dashboard as DashboardIcon, Timeline, WbSunn
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
 import AIControlPanel from "../../components/Admin-Layout/AIControlPanel";
 import StatisticsDashboard from "../../components/Admin-Statistics/StatisticsDashboard";
+import SalesStaffHomePage from "../Admin-Sales/SalesStaffHomePage";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useSelector } from "react-redux";
 import { selectUser } from "../../redux/appSlice";
@@ -16,6 +17,7 @@ const DashboardPage = () => {
   const { hasPermission } = usePermissions();
   const isAdmin = hasPermission("REPORT_REVENUE");
   const isSales = hasPermission("REPORT_SALES");
+  const showSalesHome = isSales && !isAdmin;
   const currentUser = useSelector(selectUser);
 
   // Dynamic greeting based on time of day
@@ -62,7 +64,9 @@ const DashboardPage = () => {
                 {currentUser?.name || "Administrator"}
               </Typography>
               <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ opacity: 0.6 }}>
-                Hệ thống báo cáo hiệu suất kinh doanh thời gian thực.
+                {showSalesHome
+                  ? "KPI cá nhân & lối tắt nghiệp vụ Sales."
+                  : "Hệ thống báo cáo hiệu suất kinh doanh thời gian thực."}
               </Typography>
             </Box>
           </Box>
@@ -80,14 +84,18 @@ const DashboardPage = () => {
           </Box>
         </Box>
 
-        {/* AI Control Center */}
-        <Box sx={{ px: { xs: 2, md: 4 }, mb: 4 }}>
-          <AIControlPanel />
-        </Box>
+        {!showSalesHome && (
+          <Box sx={{ px: { xs: 2, md: 4 }, mb: 4 }}>
+            <AIControlPanel />
+          </Box>
+        )}
 
-        {/* Main Statistics Content */}
         <Box sx={{ px: { xs: 2, md: 4 } }}>
+          {showSalesHome ? (
+            <SalesStaffHomePage />
+          ) : (
             <StatisticsDashboard isAdmin={isAdmin} isSales={isSales} />
+          )}
         </Box>
 
       </Box>

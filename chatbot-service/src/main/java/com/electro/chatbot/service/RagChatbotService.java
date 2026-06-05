@@ -1,16 +1,18 @@
 package com.electro.chatbot.service;
 
-import com.electro.chatbot.config.RagProperties;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.document.Document;
-import org.springframework.stereotype.Service;
-
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
+import org.springframework.stereotype.Service;
+
+import com.electro.chatbot.config.RagProperties;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
@@ -57,13 +59,14 @@ public class RagChatbotService {
                 log.warn("Không có chunk cho câu hỏi — trả lời cố định, không gọi LLM.");
                 return NO_RELEVANT_CONTEXT_REPLY;
             }
-
+            //Lấy Danh sách Văn Bản(context) và tên sản phẩm đã vượt qua được Vòng Rerank
             String context = similarDocuments.stream()
                     .map(Document::getText)
                     .collect(Collectors.joining("\n---\n"));
 
             String allowedProductNames = extractAllowedProductNames(similarDocuments);
-
+         
+            // KỸ THUẬT PROMPT ENGINEERING: ÉP KHUÔN CON AI KHÔNG ĐƯỢC ẢO GIÁC
             String systemInstructions = """
                 Bạn là "Electro Store Assistant" - nhân viên tư vấn của cửa hàng Electro Store.
                 Bạn CHỈ được trả lời dựa trên THÔNG TIN BỐI CẢNH và DANH SÁCH SẢN PHẨM ĐƯỢC PHÉP bên dưới.
@@ -84,6 +87,7 @@ public class RagChatbotService {
                 """.formatted(allowedProductNames, context);
 
             log.info("Đang gửi yêu cầu tới NVIDIA NIM để sinh câu trả lời...");
+                // Bắn Prompt đã ép khuôn lên cho NVIDIA NIM (Llama 3.1) để sinh câu trả lời
             String aiResponse = chatClient.prompt()
                     .system(systemInstructions)
                     .user(userQuery)
@@ -91,7 +95,7 @@ public class RagChatbotService {
                     .content();
             log.info("Đã nhận được câu trả lời từ AI.");
 
-            return aiResponse;
+            return aiResponse;// Trả về cho Frontend ReactJS
 
         } catch (Exception e) {
             log.error("Lỗi xảy ra trong luồng RAG Chatbot: ", e);

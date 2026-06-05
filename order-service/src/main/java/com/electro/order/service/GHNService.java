@@ -692,6 +692,101 @@ public class GHNService {
         }
     }
 
+    /**
+     * Tạo vận đơn thu hồi bảo hành: khách (from) → kho shop (to).
+     * Dùng khi Sales duyệt yêu cầu BH với đơn vị GHN và có mã quận/phường GHN của khách.
+     */
+    public GHNDto.CreateOrderResponse createWarrantyReturnOrder(
+            String claimNumber,
+            String fromName,
+            String fromPhone,
+            String fromAddress,
+            String fromWardName,
+            String fromDistrictName,
+            String fromProvinceName,
+            int fromDistrictId,
+            String fromWardCode,
+            String itemName) {
+
+        String url = ghnConfig.getBaseUrl() + CREATE_ORDER_API;
+        int toDistrictId = ghnConfig.getFromDistrictId();
+        String toWardCode = ghnConfig.getFromWardCode();
+
+        try {
+            Integer serviceId = ghnCircuitBreakerClient.resolveServiceId(fromDistrictId, toDistrictId);
+            if (serviceId == null) {
+                throw new RuntimeException("Không tìm thấy dịch vụ GHN cho tuyến thu hồi BH: " + fromDistrictId + " → " + toDistrictId);
+            }
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("payment_type_id", 2);
+            body.put("required_note", "KHONGCHOXEMHANG");
+            body.put("note", "THU HOI BAO HANH " + claimNumber + " — Shipper lấy máy tại địa chỉ khách, giao về kho");
+            body.put("client_order_code", claimNumber);
+            body.put("content", "Thu hồi BH: " + (itemName != null ? itemName : "Thiết bị"));
+            body.put("cod_amount", 0);
+            body.put("insurance_value", 0);
+            body.put("service_id", serviceId);
+            body.put("service_type_id", 2);
+            body.put("weight", ghnConfig.getDefaultWeight());
+            body.put("length", ghnConfig.getDefaultLength());
+            body.put("width", ghnConfig.getDefaultWidth());
+            body.put("height", ghnConfig.getDefaultHeight());
+
+            body.put("from_name", fromName);
+            body.put("from_phone", fromPhone);
+            body.put("from_address", fromAddress);
+            body.put("from_ward_name", fromWardName != null ? fromWardName : "");
+            body.put("from_district_name", fromDistrictName != null ? fromDistrictName : "");
+            body.put("from_province_name", fromProvinceName != null ? fromProvinceName : "");
+
+            body.put("to_name", ghnConfig.getWarehouseName());
+            body.put("to_phone", ghnConfig.getWarehousePhone());
+            body.put("to_address", ghnConfig.getWarehouseAddress());
+            body.put("to_ward_code", toWardCode);
+            body.put("to_district_id", toDistrictId);
+
+            body.put("return_phone", ghnConfig.getWarehousePhone());
+            body.put("return_address", ghnConfig.getWarehouseAddress());
+            body.put("return_district_id", toDistrictId);
+            body.put("return_ward_code", toWardCode);
+
+            List<Map<String, Object>> items = new ArrayList<>();
+            Map<String, Object> item = new HashMap<>();
+            item.put("name", itemName != null ? itemName : "Thiết bị bảo hành");
+            item.put("quantity", 1);
+            item.put("weight", ghnConfig.getDefaultWeight());
+            items.add(item);
+            body.put("items", items);
+
+            HttpHeaders headers = buildShopHeaders();
+            log.info("GHN Warranty return order for claim {}", claimNumber);
+
+            ResponseEntity<JsonNode> response = restTemplate.exchange(
+                    url, HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    JsonNode.class);
+
+            JsonNode root = response.getBody();
+            if (root == null || root.get("code").asInt() != 200) {
+                String msg = root != null && root.has("message") ? root.get("message").asText() : "Unknown GHN error";
+                throw new RuntimeException("GHN thu hồi BH thất bại: " + msg);
+            }
+
+            JsonNode data = root.get("data");
+            GHNDto.CreateOrderResponse result = new GHNDto.CreateOrderResponse();
+            result.setOrderCode(data.get("order_code").asText());
+            result.setSortCode(data.has("sort_code") ? data.get("sort_code").asText() : "");
+            result.setTotalFee(data.has("total_fee") ? data.get("total_fee").asLong() : 0);
+            log.info("GHN warranty return created: {} for claim {}", result.getOrderCode(), claimNumber);
+            return result;
+
+        } catch (Exception e) {
+            log.error("GHN createWarrantyReturnOrder error for {}: {}", claimNumber, e.getMessage());
+            throw new RuntimeException("Không thể tạo vận đơn thu hồi GHN: " + e.getMessage(), e);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // HỦY VẬN ĐƠN GHN (Cancel Shipping Order)
     // ═══════════════════════════════════════════════════════════════════════════
