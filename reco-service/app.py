@@ -1,5 +1,5 @@
 """
-app.py — FastAPI microservice gợi ý (Item-based CF).
+app.py — FastAPI microservice gợi ý (SVD Collaborative Filtering).
 
 Chạy: uvicorn app:app --host 0.0.0.0 --port 5003
 """
@@ -17,18 +17,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Dam bao duong dan goc trong sys.path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
 from config.settings import API_PORT
-from collaborativefiltering.recommend import cf_service
+from collaborativefiltering.recommend import reco_service
 import collaborativefiltering.train as train_pipeline
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -36,9 +32,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Hang so
-# ---------------------------------------------------------------------------
 DEFAULT_TOP_K = 10
 MAX_TOP_K = 50
 
@@ -46,23 +39,20 @@ EUREKA_SERVER_URL = os.getenv("EUREKA_SERVER_URL", "http://localhost:8761/eureka
 APP_NAME = os.getenv("APP_NAME", "reco-service")
 INSTANCE_HOST = os.getenv("INSTANCE_HOST", "localhost")
 
-# ---------------------------------------------------------------------------
-# FastAPI App
-# ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Item-based CF Recommendation Service",
-    description="Goi y theo rating da duyet + lich su mua (khong dung user_interactions).",
-    version="3.0.0",
+    title="SVD Recommendation Service",
+    description="Gợi ý sản phẩm bằng SVD (đặc trưng ẩn). Cold-start → sản phẩm bán chạy.",
+    version="5.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8080",       # Spring Boot
+        "http://localhost:8080",
         "http://127.0.0.1:8080",
-        "http://localhost:3000",        # ReactJS Dev Server
+        "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "*",                            # Docker / development
+        "*",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -71,9 +61,10 @@ app.add_middleware(
 
 startup_time = time.time()
 
+
 @app.on_event("startup")
 async def startup_event():
-    logger.info(f"Bat dau dang ky voi Eureka: {EUREKA_SERVER_URL} voi ten {APP_NAME}")
+    logger.info("Đăng ký Eureka: %s — app=%s", EUREKA_SERVER_URL, APP_NAME)
     try:
         await eureka_client.init_async(
             eureka_server=EUREKA_SERVER_URL,
@@ -82,21 +73,20 @@ async def startup_event():
             instance_port=int(API_PORT),
             health_check_url="/actuator/health",
         )
-        logger.info("Dang ky Eureka THANH CONG!")
+        logger.info("Đăng ký Eureka thành công!")
     except Exception as e:
-        logger.error(f"Loi dang ky Eureka: {e}")
+        logger.error("Lỗi đăng ký Eureka: %s", e)
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Huy dang ky Eureka truoc khi tat may chu...")
+    logger.info("Hủy đăng ký Eureka...")
     try:
         await eureka_client.stop_async()
     except Exception as e:
-        logger.error(f"Loi huy dang ky Eureka: {e}")
+        logger.error("Lỗi hủy đăng ký Eureka: %s", e)
 
-# ---------------------------------------------------------------------------
-# Middleware: Response Time header
-# ---------------------------------------------------------------------------
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
@@ -106,15 +96,13 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 
-# ---------------------------------------------------------------------------
-# Endpoint: Home & API docs navigation
-# ---------------------------------------------------------------------------
 @app.get("/")
 async def home():
-    loaded = cf_service.metadata is not None
+    loaded = reco_service.metadata is not None
     return {
-        "service": "Recommendation Microservice (FastAPI)",
-        "version": cf_service.metadata.get("version", "N/A") if loaded else "N/A",
+        "service": "Recommendation Microservice (SVD)",
+        "version": reco_service.metadata.get("version", "N/A") if loaded else "N/A",
+        "model_type": reco_service.metadata.get("model_type", "N/A") if loaded else "N/A",
         "status": "running" if loaded else "degraded",
         "docs_url": "/docs",
         "endpoints": {
@@ -126,130 +114,116 @@ async def home():
     }
 
 
-# ---------------------------------------------------------------------------
-# Endpoint: Health Check (Spring Boot Actuator)
-# ---------------------------------------------------------------------------
 @app.get("/health")
 @app.get("/actuator/health")
 async def health():
-    loaded = cf_service.metadata is not None
+    loaded = reco_service.metadata is not None
     if not loaded:
         return JSONResponse(
             status_code=503,
             content={
                 "status": "DOWN",
                 "model_loaded": False,
-                "error": "Model chua duoc nap. Hay chay /api/retrain truoc.",
+                "error": "Model chưa được nạp. Hãy chạy /api/retrain trước.",
             },
         )
 
+    perf = reco_service.metadata.get("performance", {})
     return {
         "status": "UP",
         "model_loaded": True,
-        "model_version": cf_service.metadata.get("version", "N/A"),
-        "data_source": cf_service.metadata.get("data_source", "N/A"),
-        "total_users": cf_service.metadata["stats"]["users"],
-        "total_items": cf_service.metadata["stats"]["products"],
-        "total_ratings": cf_service.metadata["stats"]["interactions"],
-        "cold_start_pool": len(cf_service.metadata.get("best_sellers", [])),
+        "model_type": reco_service.metadata.get("model_type", "svd_latent_factors"),
+        "model_version": reco_service.metadata.get("version", "N/A"),
+        "data_source": reco_service.metadata.get("data_source", "N/A"),
+        "total_users": reco_service.metadata["stats"]["users"],
+        "total_items": reco_service.metadata["stats"]["products"],
+        "total_ratings": reco_service.metadata["stats"]["interactions"],
+        "sparsity_pct": reco_service.metadata["stats"].get("sparsity_pct"),
+        "rmse": perf.get("rmse"),
+        "mae": perf.get("mae"),
+        "cold_start_pool": len(reco_service.metadata.get("best_sellers", [])),
         "uptime_seconds": round(time.time() - startup_time),
     }
 
 
-# ---------------------------------------------------------------------------
-# Endpoint: Goi y ca nhan hoa (Modern)
-# ---------------------------------------------------------------------------
 @app.get("/api/recommend")
 async def recommend_modern(
-    user_id: str = Query(..., description="ID cua nguoi dung can goi y"),
-    top_n: int = Query(DEFAULT_TOP_K, description="So san pham can goi y (1-50)"),
+    user_id: str = Query(..., description="ID người dùng cần gợi ý"),
+    top_n: int = Query(DEFAULT_TOP_K, description="Số sản phẩm gợi ý (1-50)"),
 ):
-    """Endpoint goi y ca nhan hoa."""
     t0 = time.time()
     top_n = max(1, min(top_n, MAX_TOP_K))
 
     try:
-        strategy, recommendations = cf_service.get_recommendations(user_id, top_n=top_n)
+        strategy, recommendations = reco_service.get_recommendations(user_id, top_n=top_n)
         elapsed = round((time.time() - t0) * 1000, 2)
 
+        is_cold_start = "cold-start" in strategy.lower() or "Popular" in strategy
         return {
             "user_id": user_id,
-            "status": "success",
+            "status": "cold_start" if is_cold_start else "success",
             "strategy": strategy,
             "top_k": top_n,
             "response_time_ms": elapsed,
             "recommendations": recommendations,
         }
     except Exception as exc:
-        logger.exception("Loi khi xu ly goi y cho user_id %s", user_id)
-        raise HTTPException(status_code=500, detail="Loi may chu noi bo: %s" % str(exc))
+        logger.exception("Lỗi gợi ý cho user_id %s", user_id)
+        raise HTTPException(status_code=500, detail="Lỗi máy chủ nội bộ: %s" % str(exc))
 
 
-# ---------------------------------------------------------------------------
-# Endpoint: Tuong thich nguoc Spring Boot (Legacy)
-# ---------------------------------------------------------------------------
 @app.get("/recommend/{user_id}")
 async def recommend_legacy(
     user_id: str,
-    top_k: int = Query(DEFAULT_TOP_K, description="So san pham can goi y (1-50)"),
+    top_k: int = Query(DEFAULT_TOP_K, description="Số sản phẩm gợi ý (1-50)"),
 ):
-    """Endpoint tuong thich nguoc hoan toan voi he thong Spring Boot cu."""
     t0 = time.time()
     top_k = max(1, min(top_k, MAX_TOP_K))
 
     try:
-        strategy, recommendations = cf_service.get_recommendations(user_id, top_n=top_k)
+        strategy, recommendations = reco_service.get_recommendations(user_id, top_n=top_k)
         elapsed = round((time.time() - t0) * 1000, 2)
 
-        status_label = "personalized" if "Collaborative" in strategy else "cold_start"
-
+        is_personalized = "SVD" in strategy
         return {
             "user_id": user_id,
-            "status": status_label,
+            "status": "personalized" if is_personalized else "cold_start",
             "top_k": top_k,
             "total_candidates": len(recommendations),
             "response_time_ms": elapsed,
             "recommendations": recommendations,
         }
     except Exception as exc:
-        logger.exception("Loi xu ly legacy recommend cho user_id %s", user_id)
-        raise HTTPException(status_code=500, detail="Loi may chu: %s" % str(exc))
+        logger.exception("Lỗi legacy recommend cho user_id %s", user_id)
+        raise HTTPException(status_code=500, detail="Lỗi máy chủ: %s" % str(exc))
 
 
-# ---------------------------------------------------------------------------
-# Background Retrain & Hot-Reload
-# ---------------------------------------------------------------------------
 def _background_retrain_and_reload():
-    """Chay ngam huan luyen lai model va reload vao RAM."""
     try:
-        logger.info("RETRAIN: Bat dau chay lai luong huan luyen offline...")
+        logger.info("RETRAIN: Bắt đầu huấn luyện SVD...")
         train_pipeline.main()
-        logger.info("RETRAIN: Huan luyen hoan thanh. Dang hot-reload...")
+        logger.info("RETRAIN: Huấn luyện xong. Hot-reload...")
 
-        success = cf_service.load_model()
+        success = reco_service.load_model()
         if success:
-            logger.info("RETRAIN: Hot reload model moi thanh cong!")
+            logger.info("RETRAIN: Hot reload thành công!")
         else:
-            logger.error("RETRAIN: Loi nap lai model moi.")
+            logger.error("RETRAIN: Lỗi nạp lại model.")
     except Exception as exc:
-        logger.error("RETRAIN: Loi nghiem trong khi chay ngam: %s", exc)
+        logger.error("RETRAIN: Lỗi nghiêm trọng: %s", exc)
 
 
 @app.post("/api/retrain")
 async def trigger_retrain(background_tasks: BackgroundTasks):
-    """Kich hoat chay huan luyen ngam (Async Background Task)."""
     background_tasks.add_task(_background_retrain_and_reload)
     return {
         "status": "accepted",
-        "message": "Da bat dau tien trinh huan luyen lai model ngam.",
+        "message": "Đã bắt đầu huấn luyện lại model SVD (background).",
     }
 
 
-# ---------------------------------------------------------------------------
-# Direct execution
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("Dang khoi dong FastAPI CF Service tai cong %d...", API_PORT)
+    logger.info("Khởi động SVD Recommendation Service cổng %d...", API_PORT)
     uvicorn.run("app:app", host="0.0.0.0", port=API_PORT, reload=False)

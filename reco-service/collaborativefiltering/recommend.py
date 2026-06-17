@@ -1,22 +1,22 @@
 """
-recommend.py — Gợi ý sản phẩm (Item-based CF).
+recommend.py — Gợi ý sản phẩm bằng SVD (đặc trưng ẩn).
 
-Đọc model từ thư mục asset/ (metadata.json, item_similarity_topk.npz).
-Chạy qua FastAPI: app.py import cf_service từ module này.
+Đọc model từ asset/ (svd_model.pkl, encoders, metadata.json).
+Cold-start (user/item mới) → fallback sản phẩm bán chạy.
 """
 
 import os
 import json
 import logging
-import pickle
 import threading
-from collections import defaultdict
 
-import numpy as np
-from scipy.sparse import load_npz
+import joblib
 
-from config.settings import MODEL_DIR, ITEM_CF_NEIGHBORS
-from collaborativefiltering.data_sources import fetch_user_seed_ratings, fetch_popular_product_ids
+from config.settings import MODEL_DIR
+from collaborativefiltering.data_sources import (
+    fetch_popular_product_ids,
+    fetch_user_interacted_product_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,14 @@ COLD_START_DEFAULT_SCORE = 4.9
 FILL_DEFAULT_SCORE = 4.8
 
 
-class ItemBasedCFService:
-    """Item-based CF: tương đồng hàng × rating seed."""
+class SVDRecommendationService:
+    """SVD Collaborative Filtering: predict rating qua vector ẩn user × item."""
 
     def __init__(self):
-        self.item_sim = None
+        self.svd_model = None
+        self.user_encoder = None
+        self.item_encoder = None
         self.metadata = None
-        self.knn_model = None
         self.is_loading = False
         self._lock = threading.Lock()
         self.load_model()
@@ -42,114 +43,109 @@ class ItemBasedCFService:
         with self._lock:
             self.is_loading = True
             try:
-                if not self._load_knn_matrices():
-                    return False
                 if not self._load_metadata():
                     return False
-                self._load_knn_model_optional()
+                if not self._load_svd_model():
+                    return False
+                if not self._load_encoders():
+                    return False
+
                 stats = self.metadata.get("stats", {})
                 logger.info(
-                    "Item-CF loaded: products=%s users=%s interactions=%s",
+                    "SVD loaded: products=%s users=%s interactions=%s rmse=%s",
                     stats.get("products"),
                     stats.get("users"),
                     stats.get("interactions"),
+                    self.metadata.get("performance", {}).get("rmse"),
                 )
                 return True
             except Exception as exc:
-                logger.error("Load model loi: %s", exc)
+                logger.error("Load model lỗi: %s", exc)
                 return False
             finally:
                 self.is_loading = False
 
-    def _load_knn_matrices(self):
-        sim_path = os.path.join(MODEL_DIR, "item_similarity_topk.npz")
-        if not os.path.exists(sim_path):
-            logger.warning("Thieu %s — chay: python collaborativefiltering/train.py", sim_path)
-            return False
-        self.item_sim = load_npz(sim_path)
-        return True
-
     def _load_metadata(self):
         meta_path = os.path.join(MODEL_DIR, "metadata.json")
         if not os.path.exists(meta_path):
-            logger.warning("Thieu %s", meta_path)
+            logger.warning("Thiếu %s — chạy: python collaborativefiltering/train.py", meta_path)
             return False
         with open(meta_path, "r", encoding="utf-8") as fh:
             self.metadata = json.load(fh)
         return True
 
-    def _load_knn_model_optional(self):
-        path = os.path.join(MODEL_DIR, "best_knn_model.pkl")
-        if os.path.exists(path):
-            with open(path, "rb") as fh:
-                artifact = pickle.load(fh)
-            self.knn_model = artifact.get("model")
-        else:
-            self.knn_model = None
+    def _load_svd_model(self):
+        path = os.path.join(MODEL_DIR, "svd_model.pkl")
+        if not os.path.exists(path):
+            logger.warning("Thiếu %s", path)
+            return False
+        self.svd_model = joblib.load(path)
+        return True
+
+    def _load_encoders(self):
+        user_path = os.path.join(MODEL_DIR, "user_encoder.joblib")
+        item_path = os.path.join(MODEL_DIR, "item_encoder.joblib")
+        if not os.path.exists(user_path) or not os.path.exists(item_path):
+            logger.warning("Thiếu encoder files trong %s", MODEL_DIR)
+            return False
+        self.user_encoder = joblib.load(user_path)
+        self.item_encoder = joblib.load(item_path)
+        return True
 
     def get_recommendations(self, user_id, top_n=10):
-        if not self.metadata or self.item_sim is None:
-            return "Warming Up (chua co model Item-CF)", []
+        if not self.metadata or self.svd_model is None:
+            return "Warming Up (chưa có model SVD)", []
 
-        product_map = self.metadata["product_map"]
-        popular = self.metadata.get("popular_products") or self.metadata.get("best_sellers", [])
-        user_map = self.metadata.get("user_map", {})
         str_uid = str(user_id)
+        popular = self.metadata.get("popular_products") or self.metadata.get("best_sellers", [])
 
-        seed_ratings, source = self._resolve_seed_ratings(user_id, str_uid, user_map)
+        if str_uid not in set(self.user_encoder.classes_):
+            return self._popular_fallback(popular, top_n, "Popular Products (cold-start: new user)")
 
-        if not seed_ratings:
-            return self._popular_fallback(popular, top_n, "Popular Products (cold-start)")
+        interacted = self._resolve_interacted_products(user_id, str_uid)
+        candidates = self._predict_all_candidates(str_uid, interacted)
 
-        interacted = {pid for pid, _ in seed_ratings}
-        candidates = self._score_item_neighbors(seed_ratings, product_map, interacted)
+        if not candidates:
+            return self._popular_fallback(
+                popular,
+                top_n,
+                "Popular Products (cold-start: no candidates)",
+                exclude=interacted,
+            )
 
-        strategy = "Item-based CF (%s, seeds=%d)" % (source, len(seed_ratings))
+        strategy = "SVD Latent Factors (user=%s, candidates=%d)" % (str_uid, len(candidates))
         return self._fill_recommendations(candidates, popular, interacted, top_n, strategy)
 
-    def _resolve_seed_ratings(self, user_id, str_uid, user_map):
-        live, source = fetch_user_seed_ratings(user_id)
+    def _resolve_interacted_products(self, user_id, str_uid):
+        """Lấy sản phẩm user đã tương tác (API live + offline train set)."""
+        live_ids = fetch_user_interacted_product_ids(user_id)
+        interacted = set(live_ids)
 
-        if str_uid in user_map and self.metadata.get("offline_user_ratings"):
-            offline = self.metadata["offline_user_ratings"].get(str_uid, [])
-            if offline and not live:
-                return [(int(p), float(r)) for p, r in offline], "trained_user_offline"
-            if offline:
-                seen = {p for p, _ in live}
-                merged = list(live)
-                for p, r in offline:
-                    if int(p) not in seen:
-                        merged.append((int(p), float(r)))
-                return merged, "trained_user_hybrid"
+        offline = self.metadata.get("offline_user_products", {}).get(str_uid, [])
+        interacted.update(int(pid) for pid in offline)
 
-        return live, source
+        return interacted
 
-    def _score_item_neighbors(self, seed_ratings, product_map, interacted):
-        scores = defaultdict(float)
+    def _predict_all_candidates(self, str_uid, interacted):
+        """Predict rating cho mọi sản phẩm trong tập train, loại đã tương tác."""
+        try:
+            u_internal = self.user_encoder.transform([str_uid])[0]
+        except ValueError:
+            return []
 
-        for pid, rating in seed_ratings:
-            pid_str = str(pid)
-            if pid_str not in product_map:
+        candidates = []
+        for pid_str in self.item_encoder.classes_:
+            pid = int(pid_str)
+            if pid in interacted:
                 continue
-            idx = product_map[pid_str]
-            row = self.item_sim[idx].toarray().flatten()
-            if row.max() <= 0:
+            try:
+                i_internal = self.item_encoder.transform([pid_str])[0]
+                pred = self.svd_model.predict(u_internal, i_internal)
+                score = max(1.0, min(5.0, float(pred.est)))
+                candidates.append({"product_id": pid, "predicted_rating": round(score, 4)})
+            except (ValueError, KeyError):
                 continue
 
-            top_indices = np.argsort(row)[::-1][:ITEM_CF_NEIGHBORS]
-            for n_idx in top_indices:
-                sim = float(row[n_idx])
-                if sim <= 0:
-                    continue
-                neighbor_pid = int(self.metadata["reverse_product_map"][str(n_idx)])
-                if neighbor_pid in interacted:
-                    continue
-                scores[neighbor_pid] += sim * float(rating)
-
-        candidates = [
-            {"product_id": pid, "predicted_rating": round(score, 4)}
-            for pid, score in scores.items()
-        ]
         candidates.sort(key=lambda x: x["predicted_rating"], reverse=True)
         return candidates
 
@@ -169,14 +165,22 @@ class ItemBasedCFService:
 
         return strategy, recs
 
-    def _popular_fallback(self, popular, top_n, strategy):
+    def _popular_fallback(self, popular, top_n, strategy, exclude=None):
+        exclude = exclude or set()
         if not popular:
             popular = fetch_popular_product_ids(top_n)
-        recs = [
-            {"product_id": int(pid), "predicted_rating": COLD_START_DEFAULT_SCORE}
-            for pid in popular[:top_n]
-        ]
+
+        recs = []
+        for pid in popular:
+            ipid = int(pid)
+            if ipid in exclude:
+                continue
+            recs.append({"product_id": ipid, "predicted_rating": COLD_START_DEFAULT_SCORE})
+            if len(recs) >= top_n:
+                break
+
         return strategy, recs
 
 
-cf_service = ItemBasedCFService()
+reco_service = SVDRecommendationService()
+cf_service = reco_service
