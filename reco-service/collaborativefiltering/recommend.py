@@ -13,6 +13,7 @@ import threading
 import joblib
 
 from config.settings import MODEL_DIR
+from contentbased.content_model import content_model
 from collaborativefiltering.data_sources import (
     fetch_popular_product_ids,
     fetch_user_interacted_product_ids,
@@ -49,6 +50,8 @@ class SVDRecommendationService:
                     return False
                 if not self._load_encoders():
                     return False
+
+                content_model.load(MODEL_DIR)
 
                 stats = self.metadata.get("stats", {})
                 logger.info(
@@ -149,6 +152,21 @@ class SVDRecommendationService:
         candidates.sort(key=lambda x: x["predicted_rating"], reverse=True)
         return candidates
 
+    def predict_rating(self, str_uid: str, product_id: int):
+        """Du doan rating SVD cho cap (user, product). None neu user/item khong trong model."""
+        if self.svd_model is None or self.user_encoder is None or self.item_encoder is None:
+            return None
+        pid_str = str(product_id)
+        if str_uid not in set(self.user_encoder.classes_) or pid_str not in set(self.item_encoder.classes_):
+            return None
+        try:
+            u_internal = self.user_encoder.transform([str_uid])[0]
+            i_internal = self.item_encoder.transform([pid_str])[0]
+            pred = self.svd_model.predict(u_internal, i_internal)
+            return max(1.0, min(5.0, float(pred.est)))
+        except (ValueError, KeyError):
+            return None
+
     def _fill_recommendations(self, candidates, popular, interacted, top_n, strategy):
         recs = candidates[:top_n]
         used = {x["product_id"] for x in recs}
@@ -183,4 +201,3 @@ class SVDRecommendationService:
 
 
 reco_service = SVDRecommendationService()
-cf_service = reco_service

@@ -26,7 +26,7 @@ import { addItemToCart } from "../../services/cartService";
 import { formatMoney } from "../../utils/formatters";
 import { trackView, trackAddToCart } from "../../services/interactionService";
 
-const ProductCard = ({ product }) => {
+const ProductCard = ({ product, compact = false }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const wishlist = useSelector(selectWishlist);
@@ -90,24 +90,30 @@ const ProductCard = ({ product }) => {
   return (
     <Card
       sx={{
-        p: 1.5,
+        p: compact ? 1.25 : 1.5,
         border: "1px solid #eee",
         borderRadius: 2,
-        height: "100%", // Cho phép component tự co giãn
+        height: "100%",
+        minHeight: compact ? 320 : undefined,
         display: "flex",
         flexDirection: "column",
         width: "100%",
         cursor: "pointer",
+        bgcolor: "#fff",
         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         "&:hover": {
-          transform: "translateY(-8px)",
-          boxShadow: "0 12px 40px rgba(0, 0, 0, 0.1)",
+          transform: compact ? "translateY(-4px)" : "translateY(-8px)",
+          boxShadow: compact
+            ? "0 8px 24px rgba(0, 0, 0, 0.08)"
+            : "0 12px 40px rgba(0, 0, 0, 0.1)",
           "& .product-image": { transform: "scale(1.05)" },
           "& .product-badge": { transform: "scale(1.1) rotate(-3deg)" },
-          "& .product-actions-hover": {
-            opacity: 1,
-            transform: "translateY(0)",
-          },
+          ...(!compact && {
+            "& .product-actions-hover": {
+              opacity: 1,
+              transform: "translateY(0)",
+            },
+          }),
         },
       }}
       onClick={handleCardClick}
@@ -115,11 +121,12 @@ const ProductCard = ({ product }) => {
       <Box
         sx={{
           position: "relative",
-          height: 220,
+          height: compact ? 168 : 220,
+          flexShrink: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "#fff", // White background is usually better for product images
+          bgcolor: "#fff",
         }}
       >
         {product.badge && (
@@ -150,7 +157,7 @@ const ProductCard = ({ product }) => {
           alt={product.name}
           className="product-image"
           sx={{
-            height: 190,
+            height: compact ? 148 : 190,
             width: "100%",
             objectFit: "contain",
             borderRadius: 1,
@@ -164,12 +171,13 @@ const ProductCard = ({ product }) => {
       </Box>
       <CardContent
         sx={{
-          textAlign: "left", // Căn lề trái chuẩn Premium
+          textAlign: "left",
           flexGrow: 1,
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "16px 16px 12px 16px",
+          padding: compact ? "12px 12px 14px" : "16px 16px 12px 16px",
+          "&:last-child": { pb: compact ? 1.75 : undefined },
         }}
       >
         <Box
@@ -178,29 +186,44 @@ const ProductCard = ({ product }) => {
             flexDirection: "column",
             justifyContent: "flex-start",
             flexGrow: 1,
-            mb: 1.5,
+            mb: compact ? 1 : 1.5,
+            minHeight: compact ? 88 : undefined,
           }}
         >
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", mb: 1, gap: 1 }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              width: "100%",
+              mb: 1,
+              gap: 1,
+              minHeight: compact ? 26 : undefined,
+            }}
+          >
             <Typography
               variant="caption"
               sx={{
-                color: "#f28900", // Màu thương hiệu
+                color: "#f28900",
                 fontWeight: 800,
-                bgcolor: "#fff3e0", // Nền cam nhạt tone sang
+                bgcolor: "#fff3e0",
                 px: 1.2,
                 py: 0.5,
                 borderRadius: "6px",
                 fontSize: "0.68rem",
                 textTransform: "uppercase",
                 letterSpacing: "0.3px",
-                border: "1px solid #ffe0b2", // Viền mờ cho nổi bật
+                border: "1px solid #ffe0b2",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
               }}
             >
               {product.category}
             </Typography>
 
-            {product.soldCount > 0 && (
+            {!compact && product.soldCount > 0 && (
               <Typography
                 variant="caption"
                 sx={{
@@ -223,14 +246,15 @@ const ProductCard = ({ product }) => {
             variant="subtitle1"
             sx={{
               fontWeight: 800,
-              fontSize: "0.9rem",
+              fontSize: compact ? "0.85rem" : "0.9rem",
               lineHeight: 1.4,
               overflow: "hidden",
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               color: "#1e293b",
-              height: "40px", // Cố định chiều cao tránh lệch card
+              minHeight: compact ? "2.8em" : undefined,
+              height: compact ? undefined : "40px",
             }}
           >
             {product.name}
@@ -239,33 +263,43 @@ const ProductCard = ({ product }) => {
         <Box
           sx={{
             display: "flex",
-            justifyContent: "flex-start", // Căn lề trái giá tiền
-            gap: 1,
-            alignItems: "baseline",
+            flexDirection: compact ? "column" : "row",
+            justifyContent: "flex-start",
+            gap: compact ? 0.25 : 1,
+            alignItems: compact ? "flex-start" : "baseline",
             mt: "auto",
-            pt: 1,
+            pt: compact ? 0.5 : 1,
+            minHeight: compact ? 52 : undefined,
           }}
         >
           <Typography
             variant="subtitle1"
-            sx={{ 
-              color: "#d32f2f", // Màu Đỏ Đậm chuyên nghiệp Mall/Lazada/Shopee nhìn chân thật hơn orange
-              fontWeight: 800, 
-              fontSize: "1rem" 
+            sx={{
+              color: "#d32f2f",
+              fontWeight: 800,
+              fontSize: compact ? "0.95rem" : "1rem",
+              lineHeight: 1.2,
             }}
           >
             {displayPriceText}
           </Typography>
-          {!hasMultipleVariants && (
+          {(!hasMultipleVariants || compact) && (
             <Typography
               variant="caption"
-              sx={{ textDecoration: "line-through", color: "#94a3b8", fontSize: "0.75rem" }}
+              sx={{
+                textDecoration: hasMultipleVariants ? "none" : "line-through",
+                color: "#94a3b8",
+                fontSize: "0.75rem",
+                lineHeight: 1.2,
+                visibility: hasMultipleVariants ? "hidden" : "visible",
+              }}
             >
               {formatMoney(product.oldPrice)}
             </Typography>
           )}
         </Box>
       </CardContent>
+      {!compact && (
       <CardActions
         sx={{
           justifyContent: "space-between",
@@ -362,6 +396,7 @@ const ProductCard = ({ product }) => {
           )}
         </IconButton>
       </CardActions>
+      )}
     </Card>
   );
 };

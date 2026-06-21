@@ -20,6 +20,12 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
     @Query("SELECT p FROM Product p WHERE p.isActive = true")
     List<Product> findByIsActiveTrue();
 
+    @Query("SELECT p FROM Product p "
+            + "JOIN FETCH p.productType "
+            + "JOIN FETCH p.producer "
+            + "WHERE p.isActive = true")
+    List<Product> findActiveWithTypeAndProducer();
+
     @Query(value = "SELECT p FROM Product p " +
             "LEFT JOIN FETCH p.images " +
             "JOIN FETCH p.productType " +

@@ -27,6 +27,7 @@ import { addItemToCart } from "../../services/cartService";
 import { getProductDetail } from "../../services/productService";
 import { trackInteraction } from "../../utils/analytics";
 import ReviewList from "../Review/ReviewList";
+import ProductSimilarRecommendations from "./ProductSimilarRecommendations";
 
 const DUMMY = {
   title: "Sản phẩm",
@@ -514,6 +515,8 @@ export default function ProductDetail() {
           </Box>
         </Box>
       </Box>
+
+      <ProductSimilarRecommendations productId={Number(id)} />
 
       {/* Dynamic Product Review Section */}
       <ReviewList productId={id} />

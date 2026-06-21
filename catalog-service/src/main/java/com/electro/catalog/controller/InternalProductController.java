@@ -28,6 +28,23 @@ public class InternalProductController {
     @Value("${app.server.url:http://localhost:8080}")
     private String serverUrl;
 
+    @GetMapping("/export-for-reco")
+    public List<RecoProductExport> exportForReco() {
+        return productRepository.findActiveWithTypeAndProducer().stream().map(p -> {
+            RecoProductExport row = new RecoProductExport();
+            row.setId(p.getId());
+            row.setName(p.getName());
+            String desc = p.getDescription();
+            if (desc == null || desc.isBlank()) {
+                desc = p.getShortDescription();
+            }
+            row.setDescription(desc != null ? desc : "");
+            row.setCategory(p.getProductType() != null ? p.getProductType().getName() : "");
+            row.setBrand(p.getProducer() != null ? p.getProducer().getName() : "");
+            return row;
+        }).toList();
+    }
+
     @GetMapping("/{productId}")
     public ProductResponse getProductById(@PathVariable("productId") Integer productId) {
         Product product = productRepository.findById(productId).orElseThrow();
@@ -106,6 +123,15 @@ public class InternalProductController {
         }
         variant.setStockQuantity(variant.getStockQuantity() + delta);
         productVariantRepository.save(variant);
+    }
+
+    @Data
+    public static class RecoProductExport {
+        private Integer id;
+        private String name;
+        private String description;
+        private String category;
+        private String brand;
     }
 
     @Data

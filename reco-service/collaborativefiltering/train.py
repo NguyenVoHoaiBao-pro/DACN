@@ -24,18 +24,29 @@ from surprise.model_selection import train_test_split
 
 from config.settings import (
     FAKE_PURCHASE_RATING,
+    MIN_TRAIN_INTERACTIONS,
     MODEL_DIR,
     SVD_N_EPOCHS,
     SVD_N_FACTORS,
     SVD_LR_ALL,
     SVD_REG_ALL,
     SVD_TEST_SIZE,
+    SYNTHETIC_AUGMENT_ENABLED,
+    SYNTHETIC_MIN_PER_USER,
+    SYNTHETIC_TARGET_INTERACTIONS,
 )
 from collaborativefiltering.service_client import (
     fetch_all_ratings_via_api,
     fetch_all_purchased_products_via_api,
     fetch_popular_products_via_api,
+    fetch_products_for_reco_via_api,
 )
+from collaborativefiltering.synthetic_data import (
+    build_synthetic_catalog_products,
+    generate_dense_synthetic_ratings,
+    popular_from_interactions,
+)
+from contentbased.content_model import content_model
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,10 +58,81 @@ logger = logging.getLogger(__name__)
 MIN_USER_INTERACTIONS = 2
 MAX_USER_INTERACTIONS = 500
 MIN_PRODUCT_INTERACTIONS = 2
-MOCK_NUM_RECORDS = 8000
-MOCK_NUM_USERS_RANGE = (10001, 10091)
-MOCK_NUM_PRODUCTS_RANGE = (20001, 20181)
 HOT_ITEMS_LIMIT = 50
+
+
+def _resolve_product_pool(catalog_products: list | None = None) -> list[int]:
+    products = catalog_products if catalog_products is not None else fetch_products_for_reco_via_api()
+    pool = [int(p["id"]) for p in products if p.get("id") is not None]
+    if pool:
+        logger.info("   Product pool cho synthetic: %d SP tu catalog.", len(pool))
+        return pool
+    logger.warning("   Khong lay duoc catalog — synthetic dung product_id 1..80.")
+    return list(range(1, 81))
+
+
+def _resolve_user_pool(df_reviews, df_purchases, df_clean=None) -> list[int]:
+    users = []
+    for frame in (df_reviews, df_purchases):
+        if frame is not None and len(frame) > 0 and "user_id" in frame.columns:
+            users.extend(int(u) for u in frame["user_id"].unique())
+    if df_clean is not None and len(df_clean) > 0:
+        users.extend(int(u) for u in df_clean["user_id"].unique())
+    if not users:
+        return list(range(1, 51))
+    return list(dict.fromkeys(users))
+
+
+def _augment_with_synthetic(df_clean, product_pool, user_pool, reason: str):
+    """Gop du lieu that + synthetic de train du de hon."""
+    logger.warning("Bo sung synthetic ratings (%s)...", reason)
+    df_synth = generate_dense_synthetic_ratings(
+        product_ids=product_pool,
+        user_ids=user_pool,
+        target_interactions=SYNTHETIC_TARGET_INTERACTIONS,
+        min_per_user=SYNTHETIC_MIN_PER_USER,
+    )
+    if df_clean is None or len(df_clean) == 0:
+        combined = df_synth
+    else:
+        combined = pd.concat([df_clean, df_synth], ignore_index=True)
+        combined = combined.groupby(["user_id", "product_id"], as_index=False)["rating"].max()
+
+    combined = build_clean_dataframe(
+        combined,
+        pd.DataFrame(columns=["user_id", "product_id", "rating"]),
+    )
+    logger.info(
+        "   Sau augment: %d tuong tac | %d users | %d products",
+        len(combined),
+        combined["user_id"].nunique() if len(combined) else 0,
+        combined["product_id"].nunique() if len(combined) else 0,
+    )
+    return combined
+
+
+def _get_mock_fallback_data(product_pool=None):
+    """Sinh du lieu day tu product pool (uu tien ID catalog that)."""
+    logger.warning("Chuyen sang Synthetic Data Fallback...")
+    pool = product_pool or _resolve_product_pool()
+    df_clean = generate_dense_synthetic_ratings(
+        product_ids=pool,
+        user_ids=list(range(1, 51)),
+        target_interactions=SYNTHETIC_TARGET_INTERACTIONS,
+        min_per_user=SYNTHETIC_MIN_PER_USER,
+    )
+    df_clean = build_clean_dataframe(
+        df_clean,
+        pd.DataFrame(columns=["user_id", "product_id", "rating"]),
+    )
+    hot_items = popular_from_interactions(df_clean, top_n=HOT_ITEMS_LIMIT) or pool[:HOT_ITEMS_LIMIT]
+    logger.info(
+        "   Synthetic fallback: %d tuong tac | %d users | %d products",
+        len(df_clean),
+        df_clean["user_id"].nunique(),
+        df_clean["product_id"].nunique(),
+    )
+    return df_clean, hot_items
 
 
 def fetch_training_ratings():
@@ -123,41 +205,6 @@ def extract_popular_products(top_n=HOT_ITEMS_LIMIT):
         return []
 
 
-def _get_mock_fallback_data():
-    """Tự sinh dữ liệu giả lập khi API microservices không khả dụng."""
-    logger.warning("API không khả dụng — chuyển sang Mock Data Fallback...")
-    np.random.seed(42)
-
-    user_ids = np.random.randint(*MOCK_NUM_USERS_RANGE, MOCK_NUM_RECORDS)
-    product_ids = np.random.randint(*MOCK_NUM_PRODUCTS_RANGE, MOCK_NUM_RECORDS)
-    ratings = np.random.choice([1.5, 3.0, 3.5, 5.0], MOCK_NUM_RECORDS, p=[0.55, 0.20, 0.15, 0.10])
-
-    df_mock = pd.DataFrame({"user_id": user_ids, "product_id": product_ids, "rating": ratings})
-    df_clean = df_mock.groupby(["user_id", "product_id"], as_index=False)["rating"].max()
-
-    user_counts = df_clean["user_id"].value_counts()
-    valid_users = user_counts[
-        (user_counts >= MIN_USER_INTERACTIONS) & (user_counts <= MAX_USER_INTERACTIONS)
-    ].index
-    df_clean = df_clean[df_clean["user_id"].isin(valid_users)]
-
-    product_counts = df_clean["product_id"].value_counts()
-    df_clean = df_clean[
-        df_clean["product_id"].isin(product_counts[product_counts >= MIN_PRODUCT_INTERACTIONS].index)
-    ]
-
-    pop_series = df_clean.groupby("product_id")["rating"].sum()
-    hot_items = [int(x) for x in pop_series.sort_values(ascending=False).index[:HOT_ITEMS_LIMIT]]
-
-    logger.info(
-        "   Mock Data: %d tương tác | %d users | %d products",
-        len(df_clean),
-        df_clean["user_id"].nunique(),
-        df_clean["product_id"].nunique(),
-    )
-    return df_clean, hot_items
-
-
 def _encode_ids(df_clean):
     """Mã hóa user_id / product_id thành chỉ số liên tục cho Surprise."""
     df = df_clean.copy()
@@ -182,7 +229,8 @@ def _build_user_item_matrix(df, user_encoder, item_encoder):
         shape=(len(user_encoder.classes_), len(item_encoder.classes_)),
     ).tocsr()
 
-    sparsity = 1.0 - (matrix.nnz / (matrix.shape[0] * matrix.shape[1]))
+    total_cells = matrix.shape[0] * matrix.shape[1]
+    sparsity = 1.0 - (matrix.nnz / total_cells) if total_cells > 0 else 1.0
     logger.info(
         "   Ma trận %dx%d, %d ratings, sparsity=%.2f%%",
         matrix.shape[0],
@@ -252,6 +300,7 @@ def _serialize_artifacts(
     popular_items,
     df_clean,
     use_fallback,
+    use_synthetic=False,
 ):
     """Lưu model SVD, encoders, ma trận User-Item và metadata."""
     logger.info("Serialize model artifacts...")
@@ -266,11 +315,16 @@ def _serialize_artifacts(
     logger.info("   - user_item_matrix.npz (%.1f KB)", os.path.getsize(matrix_path) / 1024)
 
     product_ids = [str(pid) for pid in item_encoder.classes_]
-    data_source = "MockDataEngine" if use_fallback else "microservices-api"
+    if use_fallback:
+        data_source = "synthetic-fallback"
+    elif use_synthetic:
+        data_source = "microservices-api+synthetic"
+    else:
+        data_source = "microservices-api"
 
     metadata = {
-        "version": "5.0.0-svd",
-        "model_type": "svd_latent_factors",
+        "version": "6.0.0-hybrid",
+        "model_type": "hybrid_svd_tfidf",
         "data_source": data_source,
         "trained_at": time.time(),
         "stats": {
@@ -315,27 +369,48 @@ def main():
     """Pipeline huấn luyện SVD Collaborative Filtering."""
     t_start = time.time()
     logger.info("=" * 70)
-    logger.info("BẮT ĐẦU HUẤN LUYỆN SVD CF (via Microservices API)")
+    logger.info("BẮT ĐẦU HUẤN LUYỆN HYBRID (SVD + TF-IDF via Microservices API)")
     logger.info("=" * 70)
 
     os.makedirs(MODEL_DIR, exist_ok=True)
     use_fallback = False
+    use_synthetic = False
     popular_items = []
+    catalog_products = fetch_products_for_reco_via_api()
+    product_pool = _resolve_product_pool(catalog_products)
 
     try:
         df_reviews, df_purchases = fetch_training_ratings()
         if len(df_reviews) == 0 and len(df_purchases) == 0:
-            logger.warning("Không có dữ liệu review/order từ API — dùng mock.")
+            logger.warning("Khong co du lieu review/order tu API — dung synthetic fallback.")
             use_fallback = True
         else:
             df_clean = build_clean_dataframe(df_reviews, df_purchases)
             popular_items = extract_popular_products(top_n=HOT_ITEMS_LIMIT)
+            if len(df_clean) == 0:
+                logger.warning(
+                    "Sau loc khong con du lieu (can user/product >= %d tuong tac).",
+                    MIN_USER_INTERACTIONS,
+                )
+                use_fallback = True
+            elif SYNTHETIC_AUGMENT_ENABLED and len(df_clean) < MIN_TRAIN_INTERACTIONS:
+                user_pool = _resolve_user_pool(df_reviews, df_purchases, df_clean)
+                df_clean = _augment_with_synthetic(
+                    df_clean,
+                    product_pool,
+                    user_pool,
+                    reason="du lieu that con %d ban ghi" % len(df_clean),
+                )
+                use_synthetic = True
+                if not popular_items:
+                    popular_items = popular_from_interactions(df_clean, top_n=HOT_ITEMS_LIMIT)
     except Exception as api_err:
-        logger.error("Lỗi gọi API microservices: %s", api_err)
+        logger.error("Loi goi API microservices: %s", api_err)
         use_fallback = True
 
     if use_fallback:
-        df_clean, popular_items = _get_mock_fallback_data()
+        df_clean, popular_items = _get_mock_fallback_data(product_pool)
+        use_synthetic = True
 
     df_encoded, user_encoder, item_encoder = _encode_ids(df_clean)
     matrix, sparsity = _build_user_item_matrix(df_encoded, user_encoder, item_encoder)
@@ -353,12 +428,29 @@ def main():
         popular_items,
         df_clean,
         use_fallback,
+        use_synthetic,
     )
     _cleanup_legacy_artifacts()
+    _train_content_model(catalog_products, product_pool, use_fallback or use_synthetic)
 
     logger.info("=" * 70)
-    logger.info("HUẤN LUYỆN SVD HOÀN THÀNH TRONG %.2fs!", time.time() - t_start)
+    logger.info("HUẤN LUYỆN HYBRID (SVD + TF-IDF) HOÀN THÀNH TRONG %.2fs!", time.time() - t_start)
     logger.info("=" * 70)
+
+
+def _train_content_model(catalog_products, product_pool, use_synthetic_catalog=False):
+    """Build va luu Content-Based model tu catalog-service hoac metadata synthetic."""
+    logger.info("Huan luyen Content-Based (TF-IDF)...")
+    products = catalog_products or fetch_products_for_reco_via_api()
+    if not products and use_synthetic_catalog:
+        products = build_synthetic_catalog_products(product_pool)
+        logger.info("   Dung metadata synthetic cho %d san pham (CBF demo).", len(products))
+    if not products:
+        logger.warning("Catalog trong — bo qua CBF.")
+        return
+    if content_model.build(products):
+        content_model.save(MODEL_DIR)
+        logger.info("   - content_tfidf_vectorizer.joblib, content_similarity.npy")
 
 
 if __name__ == "__main__":
