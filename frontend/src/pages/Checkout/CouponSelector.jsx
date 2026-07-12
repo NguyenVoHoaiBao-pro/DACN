@@ -76,8 +76,8 @@ const CouponSelector = ({ onSelect, selectedCode }) => {
         fullWidth
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
-        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" fontWeight="bold">Chọn ưu đãi cho bạn</Typography>
+        <DialogTitle component="div" sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" component="span" fontWeight="bold">Chọn ưu đãi cho bạn</Typography>
           <IconButton onClick={() => setOpen(false)} size="small">
             <CloseIcon />
           </IconButton>

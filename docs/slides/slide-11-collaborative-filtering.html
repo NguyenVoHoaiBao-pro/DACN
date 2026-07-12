@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slide 11 — Nghiên cứu & Lựa chọn CF</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --text: #1e293b;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --footer: #0f172a;
+      --white: #ffffff;
+      --border: #e2e8f0;
+      --good: #16a34a;
+      --bad: #dc2626;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Inter", Arial, sans-serif;
+      background: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    /* 16:9 slide canvas */
+    .slide {
+      width: 1280px;
+      height: 720px;
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      grid-template-rows: 20% 60% 20%;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+    }
+
+    /* ── Khối 1: Tiêu đề & Bài toán ── */
+    .block-header {
+      padding: 28px 40px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .block-header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .problem-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .problem-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .problem-card strong {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .problem-card.solution {
+      border-color: #93c5fd;
+      background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+    }
+
+    /* ── Khối 2 + 3: Giữa ── */
+    .block-middle {
+      display: grid;
+      grid-template-columns: 40% 60%;
+      gap: 0;
+      min-height: 0;
+    }
+
+    .compare-panel {
+      padding: 22px 24px 22px 40px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .col-chosen {
+      background: var(--accent-soft);
+      font-weight: 600;
+      color: #1d4ed8;
+    }
+
+    th.col-chosen {
+      background: var(--accent);
+      color: white;
+    }
+
+    .choice-panel {
+      padding: 22px 40px 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .choice-badge {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 8px;
+      width: fit-content;
+    }
+
+    .choice-list {
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+
+    .choice-list li {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .choice-list li span {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .conclusion {
+      margin-top: auto;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    /* Flow diagram */
+    .flow-section {
+      margin-top: 4px;
+    }
+
+    .flow-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .flow-step {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 10px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .flow-step.accent {
+      border-color: #93c5fd;
+      background: var(--accent-soft);
+      color: #1e40af;
+    }
+
+    .arrow {
+      color: var(--accent);
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .data-sources {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .tag {
+      font-size: 11px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: var(--text);
+    }
+
+    .tag.warn {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #9a3412;
+    }
+
+    .footnote {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Khối 4: Footer công nghệ ── */
+    .block-footer {
+      background: var(--footer);
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 40px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+
+    .block-footer .sep {
+      color: var(--accent);
+      margin: 0 14px;
+      font-weight: 800;
+    }
+
+    .slide-no {
+      position: absolute;
+      right: 40px;
+      bottom: 18px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .wrapper { position: relative; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <section class="slide" aria-label="Slide 11">
+
+      <!-- KHỐI 1 · 20% -->
+      <header class="block-header">
+        <h1>Nghiên cứu &amp; Lựa chọn thuật toán</h1>
+        <div class="problem-row">
+          <div class="problem-card">
+            <strong>Thực trạng</strong>
+            Catalog TMĐT lớn ➔ Khách hàng quá tải thông tin
+          </div>
+          <div class="problem-card solution">
+            <strong>Giải pháp</strong>
+            Gợi ý cá nhân hóa dựa trên Lọc cộng tác (Collaborative Filtering)
+          </div>
+        </div>
+      </header>
+
+      <!-- KHỐI 2 + 3 · 60% -->
+      <main class="block-middle">
+        <!-- Trái 40%: Bảng so sánh -->
+        <div class="compare-panel">
+          <div class="panel-title">So sánh User-based vs Item-based CF</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Tiêu chí</th>
+                <th>User-based</th>
+                <th class="col-chosen">Item-based ✓</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Đơn vị tương đồng</td>
+                <td>Người dùng giống nhau</td>
+                <td class="col-chosen">Sản phẩm giống nhau</td>
+              </tr>
+              <tr>
+                <td>User mới</td>
+                <td>Khó (ít lịch sử)</td>
+                <td class="col-chosen">Ổn hơn (SP đã xem/mua)</td>
+              </tr>
+              <tr>
+                <td>Dữ liệu thưa &amp; catalog lớn</td>
+                <td>❌ Kém</td>
+                <td class="col-chosen">✅ Rất phù hợp</td>
+              </tr>
+              <tr>
+                <td>Ổn định theo thời gian</td>
+                <td>Thay đổi nhanh</td>
+                <td class="col-chosen">SP ổn định hơn</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Phải 60%: Lựa chọn + Nguyên lý -->
+        <div class="choice-panel">
+          <div class="choice-badge">Lựa chọn: Item-based Collaborative Filtering</div>
+          <ul class="choice-list">
+            <li><span>Dữ liệu</span>Rating (review) + Implicit (lịch sử mua)</li>
+            <li><span>Thuật toán</span>Scikit-surprise · KNNWithMeans · Cosine similarity</li>
+            <li><span>Triển khai</span>reco-service (Python/FastAPI) — microservice riêng</li>
+          </ul>
+
+          <div class="flow-section">
+            <div class="flow-title">Nguyên lý Item-based CF</div>
+            <div class="flow">
+              <div class="flow-step">Hành vi User<br/>(Review / Order)</div>
+              <div class="arrow">➔</div>
+              <div class="flow-step accent">Cosine<br/>Similarity</div>
+              <div class="arrow">➔</div>
+              <div class="flow-step">Đề xuất<br/>Top-K</div>
+            </div>
+            <div class="data-sources">
+              <span class="tag">review-service</span>
+              <span class="tag">order-service</span>
+              <span class="tag warn">Cold-start → Bán chạy / Phổ biến</span>
+            </div>
+            <p class="footnote">* Không đi sâu công thức — chi tiết ở Slide 12 (Notebook) &amp; 13 (Triển khai)</p>
+          </div>
+
+          <p class="conclusion">✓ Item-based CF phù hợp catalog điện tử đông sản phẩm và dữ liệu hành vi còn thưa.</p>
+        </div>
+      </main>
+
+      <!-- KHỐI 4 · 20% -->
+      <footer class="block-footer">
+        Thuật toán: Scikit-surprise (KNNWithMeans)
+        <span class="sep">➔</span>
+        Kiến trúc: Microservice reco-service (Python FastAPI)
+      </footer>
+    </section>
+    <div class="slide-no">Slide 11 / 20</div>
+  </div>
+</body>
+</html>

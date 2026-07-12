@@ -17,16 +17,56 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
-  addToCart,
   removeFromWishlist,
+  selectIsLoggedIn,
+  selectUser,
   selectWishlist,
+  setCart,
 } from "../../redux/appSlice";
+import { addItemToCart } from "../../services/cartService";
+import { trackAddToCart } from "../../services/interactionService";
 import { formatMoney } from "../../utils/formatters";
 
 const Wishlist = () => {
   const wishlist = useSelector(selectWishlist);
+  const isLoggedIn = useSelector(selectIsLoggedIn);
+  const currentUser = useSelector(selectUser);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // Thêm vào giỏ hàng qua BACKEND API (không chỉ Redux cục bộ) để trang giỏ hàng đồng bộ.
+  const handleAddToCart = async (e, product) => {
+    e.stopPropagation();
+
+    const variants = product.originalData?.variants || [];
+    const hasMultipleVariants = variants.length > 1;
+
+    // Nhiều biến thể hoặc không rõ biến thể -> vào trang chi tiết để chọn cấu hình/màu.
+    if (hasMultipleVariants || variants.length === 0) {
+      navigate(`/product/${product.id}`, {
+        state: { product: product.originalData || product },
+      });
+      return;
+    }
+
+    if (!isLoggedIn) {
+      alert("Vui lòng đăng nhập để thêm vào giỏ hàng");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const cart = await addItemToCart(variants[0].id, 1);
+      dispatch(setCart(cart?.items || []));
+      if (currentUser?.id) {
+        trackAddToCart(currentUser.id, Number(product.id));
+      }
+      alert("Đã thêm " + product.name + " vào giỏ hàng!");
+    } catch (err) {
+      console.error("Add to cart from wishlist failed:", err);
+      alert(err.response?.data?.message || "Không thể thêm vào giỏ hàng");
+    }
+  };
 
   return (
     <Container sx={{ py: 4, maxWidth: "1200px" }}>
@@ -169,19 +209,11 @@ const Wishlist = () => {
                           boxShadow: "0 4px 12px rgba(242,137,0,0.3)",
                         },
                       }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dispatch(
-                          addToCart({
-                            id: product.id.toString(),
-                            name: product.name,
-                            price: product.price,
-                            image: product.image,
-                          }),
-                        );
-                      }}
+                      onClick={(e) => handleAddToCart(e, product)}
                     >
-                      Thêm vào giỏ
+                      {(product.originalData?.variants?.length || 0) > 1
+                        ? "Chọn loại"
+                        : "Thêm vào giỏ"}
                     </Button>
                   </TableCell>
                   <TableCell align="center">

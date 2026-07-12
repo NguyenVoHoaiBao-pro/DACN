@@ -5,6 +5,7 @@ import AdminLayout from "../../components/Admin-Layout/AdminLayout";
 import AIControlPanel from "../../components/Admin-Layout/AIControlPanel";
 import StatisticsDashboard from "../../components/Admin-Statistics/StatisticsDashboard";
 import SalesStaffHomePage from "../Admin-Sales/SalesStaffHomePage";
+import WarehouseStaffHomePage from "../Admin-Warehouse/WarehouseStaffHomePage";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useSelector } from "react-redux";
 import { selectUser } from "../../redux/appSlice";
@@ -14,10 +15,11 @@ import { selectUser } from "../../redux/appSlice";
  * Now powered by the high-performance StatisticsDashboard component.
  */
 const DashboardPage = () => {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isWarehouseUser, isSalesUser, isAdminUser } = usePermissions();
   const isAdmin = hasPermission("REPORT_REVENUE");
   const isSales = hasPermission("REPORT_SALES");
-  const showSalesHome = isSales && !isAdmin;
+  const showSalesHome = isSalesUser && !isAdminUser;
+  const showWarehouseHome = isWarehouseUser && !isAdminUser && !isSalesUser;
   const currentUser = useSelector(selectUser);
 
   // Dynamic greeting based on time of day
@@ -64,34 +66,40 @@ const DashboardPage = () => {
                 {currentUser?.name || "Administrator"}
               </Typography>
               <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ opacity: 0.6 }}>
-                {showSalesHome
-                  ? "KPI cá nhân & lối tắt nghiệp vụ Sales."
-                  : "Hệ thống báo cáo hiệu suất kinh doanh thời gian thực."}
+                {showWarehouseHome
+                  ? "Tổng quan nhập — xuất kho & tồn hàng."
+                  : showSalesHome
+                    ? "KPI cá nhân & lối tắt nghiệp vụ Sales."
+                    : "Hệ thống báo cáo hiệu suất kinh doanh thời gian thực."}
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Chip
-              icon={<DashboardIcon sx={{ fontSize: "1rem !important" }} />}
-              label="Báo cáo sống"
-              sx={{ fontWeight: 850, borderRadius: 2.5, bgcolor: "#3b82f615", color: "#3b82f6", border: "1px solid #3b82f630" }}
-            />
-            <Chip
-              icon={<Timeline sx={{ fontSize: "1rem !important" }} />}
-              label="Phân tích sâu"
-              sx={{ fontWeight: 850, borderRadius: 2.5, bgcolor: "#8b5cf615", color: "#8b5cf6", border: "1px solid #8b5cf630" }}
-            />
-          </Box>
+          {!showWarehouseHome && (
+            <Box sx={{ display: "flex", gap: 1.5 }}>
+              <Chip
+                icon={<DashboardIcon sx={{ fontSize: "1rem !important" }} />}
+                label="Báo cáo sống"
+                sx={{ fontWeight: 850, borderRadius: 2.5, bgcolor: "#3b82f615", color: "#3b82f6", border: "1px solid #3b82f630" }}
+              />
+              <Chip
+                icon={<Timeline sx={{ fontSize: "1rem !important" }} />}
+                label="Phân tích sâu"
+                sx={{ fontWeight: 850, borderRadius: 2.5, bgcolor: "#8b5cf615", color: "#8b5cf6", border: "1px solid #8b5cf630" }}
+              />
+            </Box>
+          )}
         </Box>
 
-        {!showSalesHome && (
+        {!showSalesHome && !showWarehouseHome && (
           <Box sx={{ px: { xs: 2, md: 4 }, mb: 4 }}>
             <AIControlPanel />
           </Box>
         )}
 
         <Box sx={{ px: { xs: 2, md: 4 } }}>
-          {showSalesHome ? (
+          {showWarehouseHome ? (
+            <WarehouseStaffHomePage />
+          ) : showSalesHome ? (
             <SalesStaffHomePage />
           ) : (
             <StatisticsDashboard isAdmin={isAdmin} isSales={isSales} />

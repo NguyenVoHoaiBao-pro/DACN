@@ -44,7 +44,7 @@ public class AdminInventoryController {
     @PreAuthorize("hasAnyAuthority('IMEI_MANAGE', 'ROLE_ADMIN', 'PRODUCT_MANAGE')")
     public ResponseEntity<ApiResponse<String>> addImeiToProduct(@Valid @RequestBody InventoryDto.ImeiRequest request) {
         inventoryService.addImeiToProduct(request);
-        return ResponseEntity.ok(ApiResponse.success("Đã lưu danh sách IMEI vào hệ thống", null));
+        return ResponseEntity.ok(ApiResponse.success("Đã lưu danh sách Serial vào hệ thống", null));
     }
 
     @GetMapping("/variants/search")
@@ -57,12 +57,28 @@ public class AdminInventoryController {
     @PreAuthorize("hasAnyAuthority('IMEI_MANAGE', 'ROLE_ADMIN', 'PRODUCT_MANAGE')")
     public ResponseEntity<ApiResponse<String>> uploadImeiExcel(@RequestParam("file") MultipartFile file) {
         inventoryService.importImeiFromExcel(file);
-        return ResponseEntity.ok(ApiResponse.success("Import IMEI từ file Excel thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Import Serial từ file Excel thành công", null));
     }
 
     @GetMapping("/transactions")
     @PreAuthorize("hasAnyAuthority('INVENTORY_STAT', 'ROLE_ADMIN', 'PRODUCT_MANAGE')")
     public ResponseEntity<ApiResponse<List<InventoryDto.InventoryResponse>>> getInventoryTransactions() {
         return ResponseEntity.ok(ApiResponse.success("Lịch sử biến động kho", inventoryService.getInventoryTransactions()));
+    }
+
+    @GetMapping("/serials/fifo")
+    @PreAuthorize("hasAnyAuthority('IMEI_MANAGE', 'ORDER_ASSIGN_SHIPPING', 'ROLE_ADMIN', 'PRODUCT_MANAGE')")
+    public ResponseEntity<ApiResponse<List<InventoryDto.SerialFifoItem>>> fifoSerials(
+            @RequestParam Integer variantId,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(ApiResponse.success("Serial FIFO",
+                inventoryService.getFifoSerials(variantId, limit)));
+    }
+
+    @GetMapping("/stock-lots/{lotId}/serials")
+    @PreAuthorize("hasAnyAuthority('IMEI_MANAGE', 'STOCK_IMPORT', 'ROLE_ADMIN', 'PRODUCT_MANAGE')")
+    public ResponseEntity<ApiResponse<List<InventoryDto.SerialFifoItem>>> lotSerials(@PathVariable Integer lotId) {
+        return ResponseEntity.ok(ApiResponse.success("Serial trong lô",
+                inventoryService.getLotSerials(lotId)));
     }
 }

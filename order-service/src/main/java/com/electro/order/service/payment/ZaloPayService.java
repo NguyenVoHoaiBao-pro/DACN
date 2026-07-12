@@ -3,6 +3,7 @@ package com.electro.order.service.payment;
 import com.electro.order.config.PaymentConfig;
 import com.electro.order.dto.PaymentDto;
 import com.electro.order.entity.Order;
+import com.electro.order.entity.PaymentTransaction;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -188,6 +189,81 @@ public class ZaloPayService {
                     .success(false)
                     .verified(false)
                     .message("Lỗi xác thực callback ZaloPay: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * Gọi API hoàn tiền ZaloPay.
+     */
+    public PaymentDto.GatewayRefundResult refund(
+            PaymentTransaction originalTxn, BigDecimal amount, String refundReason) {
+        try {
+            PaymentConfig.ZaloPay zpConfig = paymentConfig.getZalopay();
+            if (originalTxn.getGatewayTransactionId() == null || originalTxn.getGatewayTransactionId().isBlank()) {
+                return PaymentDto.GatewayRefundResult.builder()
+                        .success(false)
+                        .message("Thiếu mã giao dịch ZaloPay gốc (zp_trans_id)")
+                        .build();
+            }
+
+            String mRefundId = "RF_" + System.currentTimeMillis();
+            long refundAmount = amount.longValue();
+            long timestamp = System.currentTimeMillis();
+            String description = refundReason != null ? refundReason : "Hoan tien don hang";
+
+            String macData = zpConfig.getAppId() + "|" + originalTxn.getGatewayTransactionId()
+                    + "|" + refundAmount + "|" + description + "|" + timestamp;
+            String mac = hmacSHA256(zpConfig.getKey1(), macData);
+
+            Map<String, String> formData = new LinkedHashMap<>();
+            formData.put("app_id", zpConfig.getAppId());
+            formData.put("zp_trans_id", originalTxn.getGatewayTransactionId());
+            formData.put("m_refund_id", mRefundId);
+            formData.put("amount", String.valueOf(refundAmount));
+            formData.put("timestamp", String.valueOf(timestamp));
+            formData.put("description", description);
+            formData.put("mac", mac);
+
+            StringBuilder formBody = new StringBuilder();
+            for (Map.Entry<String, String> entry : formData.entrySet()) {
+                if (formBody.length() > 0) formBody.append("&");
+                formBody.append(entry.getKey()).append("=")
+                        .append(java.net.URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+            }
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(zpConfig.getRefundUrl()))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(formBody.toString()))
+                    .build();
+
+            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            String body = httpResponse.body();
+            log.info("ZaloPay refund response: {}", body);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responseMap = objectMapper.readValue(body, Map.class);
+            int returnCode = responseMap.get("return_code") != null
+                    ? ((Number) responseMap.get("return_code")).intValue() : -1;
+            boolean success = returnCode == 1;
+            String refundId = responseMap.get("refund_id") != null
+                    ? responseMap.get("refund_id").toString() : mRefundId;
+            String returnMessage = responseMap.get("return_message") != null
+                    ? responseMap.get("return_message").toString() : "";
+
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(success)
+                    .gatewayRefundId(refundId)
+                    .responseCode(String.valueOf(returnCode))
+                    .message(success ? "Hoàn tiền ZaloPay thành công" : "ZaloPay refund failed: " + returnMessage)
+                    .rawResponse(body)
+                    .build();
+        } catch (Exception e) {
+            log.error("ZaloPay refund error", e);
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Lỗi gọi API hoàn tiền ZaloPay: " + e.getMessage())
                     .build();
         }
     }

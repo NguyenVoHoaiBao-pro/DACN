@@ -98,6 +98,8 @@ public class OrderDto {
         private String shippingProvince;
         private String shippingDistrict;
         private String shippingWard;
+        private Integer toDistrictId;
+        private String toWardCode;
         private BigDecimal shippingFee;
 
         // Thanh toán & trạng thái
@@ -130,6 +132,8 @@ public class OrderDto {
 
         // Sản phẩm
         private List<OrderItemResponse> items;
+
+        private RefundDto.CancellationRefundResult cancellationRefund;
     }
 
     // ─── Response: Tóm tắt đơn (dùng cho danh sách) ──────────────────────────
@@ -260,6 +264,9 @@ public class OrderDto {
         private String shippingWard;
         private BigDecimal shippingFee;
         private String trackingCode;
+        private String ghnShippingStatus;
+        private String ghnShippingStatusDisplay;
+        private LocalDateTime ghnStatusUpdatedAt;
 
         // Thanh toán & trạng thái
         private String paymentMethod;
@@ -294,6 +301,8 @@ public class OrderDto {
 
         // Sản phẩm
         private List<OrderItemResponse> items;
+
+        private RefundDto.CancellationRefundResult cancellationRefund;
     }
 
     // ─── Response: Tóm tắt đơn cho admin (thêm username) ────────────────────
@@ -325,6 +334,15 @@ public class OrderDto {
         private String assignedSalesName;
         private String orderSource;
         private String salesPipelineStatus;
+
+        /** Picking list — giao diện xuất kho */
+        private String shippingName;
+        private String shippingPhone;
+        private String productSummary;
+        private String carrierLabel;
+        private String trackingCode;
+        private String ghnShippingStatus;
+        private String ghnShippingStatusDisplay;
     }
 
     // ─── Response: Thống kê đơn hàng ─────────────────────────────────────────
@@ -342,5 +360,21 @@ public class OrderDto {
         private Long cancelledOrders;
         private Long refundedOrders;
         private Long hiddenOrders;  // số đơn đang bị ẩn
+    }
+
+    @Data
+    @lombok.Builder
+    public static class ReturnContextResponse {
+        private Integer orderId;
+        private String orderCode;
+        private String orderStatus;
+        private String customerName;
+        private String customerPhone;
+        private String trackingCode;
+        private Integer productItemId;
+        private String serialNumber;
+        private String productName;
+        private String skuCode;
+        private String variantName;
     }
 }

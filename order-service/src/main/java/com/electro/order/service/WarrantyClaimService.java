@@ -4,6 +4,7 @@ import com.electro.order.client.CatalogClient;
 import com.electro.order.client.UserClient;
 import com.electro.order.dto.CatalogClientDto;
 import com.electro.order.dto.GHNDto;
+import com.electro.order.dto.RefundDto;
 import com.electro.order.dto.UserDto;
 import com.electro.order.dto.WarrantyDto;
 import com.electro.order.entity.Order;
@@ -20,8 +21,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 
@@ -36,6 +39,7 @@ public class WarrantyClaimService {
     private final CatalogClient catalogClient;
     private final UserClient userClient;
     private final GHNService ghnService;
+    private final RefundService refundService;
 
     public WarrantyDto.ClaimDetailResponse submitClaim(Integer userId, WarrantyDto.ClaimSubmitRequest request) {
         if (request.getOrderId() != null) {
@@ -148,23 +152,202 @@ public class WarrantyClaimService {
                 ? request.getReturnCarrier().trim() : "";
         String tracking = request != null && request.getReturnTrackingCode() != null
                 ? request.getReturnTrackingCode().trim() : "";
-        if (carrier.isEmpty()) {
-            carrier = "GHTK";
-        }
-        if (isGhnCarrier(carrier) && tracking.isEmpty()) {
-            tryCreateGhnReturnOrder(claim).ifPresent(code -> {
-                claim.setReturnCarrier("GHN");
-                claim.setReturnTrackingCode(code);
-            });
-        }
-        if (claim.getReturnTrackingCode() == null || claim.getReturnTrackingCode().isBlank()) {
-            if (tracking.isEmpty()) {
-                tracking = "GHTK-" + claim.getClaimNumber();
-            }
-            claim.setReturnCarrier(carrier);
-            claim.setReturnTrackingCode(tracking);
-        }
+        assignReturnShipment(claim, carrier, tracking);
         return mapToDetail(claimRepository.save(claim), info);
+    }
+
+    /**
+     * Webhook GHN — cập nhật trạng thái vận đơn thu hồi BH (luồng ngược khách → kho).
+     * @return true nếu tìm thấy phiếu BH
+     */
+    public boolean applyGhnWebhookStatus(GHNDto.WebhookCallbackRequest payload) {
+        WarrantyClaim claim = resolveClaimFromGhnWebhook(payload);
+        if (claim == null) {
+            return false;
+        }
+
+        String ghnStatus = payload.getStatus().trim().toLowerCase();
+        claim.setGhnReturnShippingStatus(ghnStatus);
+        claim.setGhnReturnStatusUpdatedAt(parseGhnWebhookTime(payload.getTime()));
+
+        if (payload.getOrderCode() != null && !payload.getOrderCode().isBlank()) {
+            if (claim.getReturnTrackingCode() == null || claim.getReturnTrackingCode().isBlank()) {
+                claim.setReturnTrackingCode(payload.getOrderCode().trim());
+            }
+            if (claim.getReturnCarrier() == null || claim.getReturnCarrier().isBlank()) {
+                claim.setReturnCarrier("GHN");
+            }
+        }
+
+        appendGhnWebhookNote(claim, payload, ghnStatus);
+
+        switch (ghnStatus) {
+            case "delivered" -> applyDeliveredToWarehouseFromGhnWebhook(claim, payload);
+            case "cancel" -> applyReturnCancelFromGhnWebhook(claim, payload);
+            case "delivery_fail" -> appendReturnDeliveryFailNote(claim, payload);
+            case "lost", "damage", "exception" -> {
+                claim.setPriority(WarrantyClaim.Priority.HIGH);
+                appendReturnExceptionNote(claim, payload, ghnStatus);
+            }
+            default -> log.debug("GHN webhook BH: {} — {}", claim.getClaimNumber(), ghnStatus);
+        }
+
+        claimRepository.save(claim);
+        log.info("GHN webhook applied (warranty): claim={}, ghnStatus={}, claimStatus={}",
+                claim.getClaimNumber(), ghnStatus, claim.getStatus());
+        return true;
+    }
+
+    private WarrantyClaim resolveClaimFromGhnWebhook(GHNDto.WebhookCallbackRequest payload) {
+        if (payload.getClientOrderCode() != null && !payload.getClientOrderCode().isBlank()) {
+            String code = payload.getClientOrderCode().trim();
+            var byClaim = claimRepository.findByClaimNumber(code);
+            if (byClaim.isPresent()) {
+                return byClaim.get();
+            }
+        }
+        if (payload.getOrderCode() != null && !payload.getOrderCode().isBlank()) {
+            return claimRepository.findFirstByReturnTrackingCodeIgnoreCase(payload.getOrderCode().trim())
+                    .orElse(null);
+        }
+        return null;
+    }
+
+    private LocalDateTime parseGhnWebhookTime(String time) {
+        if (time == null || time.isBlank()) {
+            return LocalDateTime.now();
+        }
+        try {
+            return Instant.parse(time).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime();
+        } catch (Exception e) {
+            return LocalDateTime.now();
+        }
+    }
+
+    private void appendGhnWebhookNote(WarrantyClaim claim, GHNDto.WebhookCallbackRequest payload, String ghnStatus) {
+        String display = ghnService.translateGHNStatus(ghnStatus);
+        String line = "[GHN thu hồi " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
+                + "] " + display;
+        if (payload.getDescription() != null && !payload.getDescription().isBlank()) {
+            line += " — " + payload.getDescription();
+        }
+        if (payload.getReason() != null && !payload.getReason().isBlank()) {
+            line += " (Lý do: " + payload.getReason() + ")";
+        }
+        String existing = claim.getStaffNotes();
+        claim.setStaffNotes(existing == null || existing.isBlank() ? line : existing + "\n" + line);
+    }
+
+    /** Máy đã về kho — hoàn tiền (RF) thay vì IN_REPAIR. */
+    private void applyDeliveredToWarehouseFromGhnWebhook(WarrantyClaim claim, GHNDto.WebhookCallbackRequest payload) {
+        if (claim.getStatus() == WarrantyClaim.ClaimStatus.COMPLETED
+                || claim.getStatus() == WarrantyClaim.ClaimStatus.REJECTED) {
+            return;
+        }
+        if (claim.getStatus() != WarrantyClaim.ClaimStatus.APPROVED) {
+            log.warn("GHN delivered (BH) ignored for claim {} in status {}", claim.getClaimNumber(), claim.getStatus());
+            return;
+        }
+        String inbound = "Webhook GHN: thu hồi vận chuyển hoàn tất — máy đã về kho (delivered)";
+        if (payload.getDescription() != null && !payload.getDescription().isBlank()) {
+            inbound += " — " + payload.getDescription();
+        }
+        finalizeWarrantyInboundAsRefund(claim, inbound);
+        log.info("Warranty claim {} completed (REFUND path) via GHN delivered webhook", claim.getClaimNumber());
+    }
+
+    private void applyReturnCancelFromGhnWebhook(WarrantyClaim claim, GHNDto.WebhookCallbackRequest payload) {
+        if (claim.getStatus() != WarrantyClaim.ClaimStatus.APPROVED) {
+            return;
+        }
+        String note = "GHN hủy vận đơn thu hồi"
+                + (payload.getReason() != null ? ": " + payload.getReason() : "");
+        String existing = claim.getStaffNotes();
+        claim.setStaffNotes(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+    }
+
+    private void appendReturnDeliveryFailNote(WarrantyClaim claim, GHNDto.WebhookCallbackRequest payload) {
+        String reason = payload.getReason() != null ? payload.getReason() : "Giao thu hồi thất bại";
+        String line = "[GHN] Thu hồi thất bại — " + reason;
+        String existing = claim.getStaffNotes();
+        claim.setStaffNotes(existing == null || existing.isBlank() ? line : existing + "\n" + line);
+    }
+
+    private void appendReturnExceptionNote(
+            WarrantyClaim claim, GHNDto.WebhookCallbackRequest payload, String ghnStatus) {
+        String display = ghnService.translateGHNStatus(ghnStatus);
+        String line = "[GHN CẢNH BÁO thu hồi] " + display;
+        if (payload.getReason() != null && !payload.getReason().isBlank()) {
+            line += " — " + payload.getReason();
+        }
+        String existing = claim.getStaffNotes();
+        claim.setStaffNotes(existing == null || existing.isBlank() ? line : existing + "\n" + line);
+    }
+
+    /**
+     * Gán vận đơn thu hồi — mã GHN bắt buộc do API GHN sinh ra (không tự bịa GHTK-BH-...).
+     */
+    private void assignReturnShipment(WarrantyClaim claim, String carrier, String tracking) {
+        String normalizedCarrier = (carrier == null || carrier.isBlank()) ? "GHN" : carrier.trim();
+
+        if (isPlaceholderTrackingCode(tracking)) {
+            throw new BadRequestException(
+                    "Mã vận đơn không hợp lệ. Mã thu hồi bảo hành phải do GHN cấp qua API — không được tự sinh.");
+        }
+
+        if (!isGhnCarrier(normalizedCarrier)) {
+            throw new BadRequestException(
+                    "Thu hồi bảo hành chỉ hỗ trợ GHN. Vui lòng chọn GHN để hệ thống tạo vận đơn Reverse Logistics.");
+        }
+
+        if (tracking != null && !tracking.isBlank()) {
+            claim.setReturnCarrier("GHN");
+            claim.setReturnTrackingCode(tracking);
+            return;
+        }
+
+        String ghnCode = createGhnReturnOrderRequired(claim);
+        claim.setReturnCarrier("GHN");
+        claim.setReturnTrackingCode(ghnCode);
+    }
+
+    private String createGhnReturnOrderRequired(WarrantyClaim claim) {
+        PickupAddress addr = resolvePickupAddress(claim)
+                .orElseThrow(() -> new BadRequestException(
+                        "Thiếu địa chỉ lấy hàng GHN (mã quận/phường). "
+                                + "Khách cần chọn đủ Tỉnh/Quận/Phường GHN khi gửi yêu cầu BH."));
+        try {
+            GHNDto.CreateOrderResponse ghn = ghnService.createWarrantyReturnOrder(
+                    claim.getClaimNumber(),
+                    addr.name(),
+                    addr.phone(),
+                    addr.address(),
+                    addr.wardName(),
+                    addr.districtName(),
+                    addr.provinceName(),
+                    addr.districtId(),
+                    addr.wardCode(),
+                    claim.getProductName());
+            if (ghn.getOrderCode() == null || ghn.getOrderCode().isBlank()) {
+                throw new BadRequestException("GHN không trả về mã vận đơn.");
+            }
+            return ghn.getOrderCode();
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("GHN warranty return failed for {}: {}", claim.getClaimNumber(), e.getMessage());
+            throw new BadRequestException(
+                    "Không tạo được vận đơn thu hồi trên GHN: " + e.getMessage()
+                            + ". Duyệt thất bại — mã vận đơn chỉ hợp lệ khi GHN API trả về thành công.");
+        }
+    }
+
+    private static boolean isPlaceholderTrackingCode(String code) {
+        if (code == null || code.isBlank()) {
+            return false;
+        }
+        String normalized = code.trim().toUpperCase();
+        return normalized.startsWith("GHTK-BH") || normalized.startsWith("GHTK-BH-");
     }
 
     /** Tra cứu hành trình vận đơn thu hồi (GHN). */
@@ -174,7 +357,7 @@ public class WarrantyClaimService {
             throw new BadRequestException("Chỉ tra cứu GHN khi đơn vị VC là GHN.");
         }
         String code = claim.getReturnTrackingCode();
-        if (code == null || code.isBlank() || code.startsWith("GHTK-")) {
+        if (code == null || code.isBlank() || isPlaceholderTrackingCode(code)) {
             throw new BadRequestException("Chưa có mã vận đơn GHN hợp lệ cho ticket này.");
         }
         return ghnService.getTrackingInfo(code.trim());
@@ -209,9 +392,12 @@ public class WarrantyClaimService {
         return mapToInboundView(claim, loadItem(claim.getProductItemId()));
     }
 
-    /** Kho: đã nhận máy — APPROVED → RECEIVED */
+    /** Kho: đã nhận máy hỏng — APPROVED → COMPLETED (hoàn tiền), máy DEFECTIVE, tạo RF */
     public WarrantyDto.ClaimDetailResponse markReceived(Integer id, WarrantyDto.ClaimInboundReceiveRequest request) {
         WarrantyClaim claim = findClaim(id);
+        if (claim.getStatus() == WarrantyClaim.ClaimStatus.COMPLETED) {
+            throw new BadRequestException("Ticket đã hoàn tất (đã tạo yêu cầu hoàn tiền).");
+        }
         if (claim.getStatus() != WarrantyClaim.ClaimStatus.APPROVED) {
             throw new BadRequestException("Chỉ xác nhận nhận hàng khi đơn đã được duyệt thu hồi (APPROVED).");
         }
@@ -229,12 +415,60 @@ public class WarrantyClaimService {
                 claim.setWarehouseInboundNotes(request.getWarehouseNotes().trim());
             }
         }
-        claim.setStatus(WarrantyClaim.ClaimStatus.RECEIVED);
-        claim.setReceivedDate(LocalDateTime.now());
-        if (claim.getProductItemId() != null) {
-            catalogClient.updateItemStatus(claim.getProductItemId(), "IN_REPAIR");
+        finalizeWarrantyInboundAsRefund(claim, null);
+        return mapToDetail(claim, buildSystemInfo(claim, loadItem(claim.getProductItemId()), null));
+    }
+
+    /**
+     * Kết thúc luồng thu hồi BH: máy DEFECTIVE + ticket COMPLETED/REFUND + yêu cầu hoàn tiền RF.
+     */
+    private void finalizeWarrantyInboundAsRefund(WarrantyClaim claim, String inboundNote) {
+        if (claim.getReceivedDate() == null) {
+            claim.setReceivedDate(LocalDateTime.now());
         }
-        return mapToDetail(claimRepository.save(claim), buildSystemInfo(claim, loadItem(claim.getProductItemId()), null));
+        if (inboundNote != null && !inboundNote.isBlank()) {
+            String existing = claim.getWarehouseInboundNotes();
+            claim.setWarehouseInboundNotes(
+                    existing == null || existing.isBlank() ? inboundNote : existing + "\n" + inboundNote);
+        }
+        claim.setStatus(WarrantyClaim.ClaimStatus.COMPLETED);
+        claim.setFinalResolution(WarrantyClaim.FinalResolution.REFUND);
+        claim.setCompletedDate(LocalDateTime.now());
+
+        if (claim.getProductItemId() != null) {
+            catalogClient.updateItemStatus(claim.getProductItemId(), "DEFECTIVE");
+        }
+
+        claimRepository.save(claim);
+        triggerRefundFromWarranty(claim);
+    }
+
+    private void triggerRefundFromWarranty(WarrantyClaim claim) {
+        if (claim.getOrderId() == null) {
+            log.info("Warranty claim {} has no orderId — skip refund request", claim.getClaimNumber());
+            return;
+        }
+        try {
+            Order order = orderRepository.findById(claim.getOrderId()).orElse(null);
+            String serial = firstNonBlank(claim.getReceivedImei(),
+                    firstNonBlank(claim.getSerialNumber(), claim.getImei()));
+            var refundReq = new RefundDto.CreateFromWarrantyRequest(
+                    claim.getId(),
+                    claim.getClaimNumber(),
+                    claim.getOrderId(),
+                    order != null ? order.getOrderCode() : null,
+                    serial,
+                    claim.getContactName(),
+                    claim.getContactPhone(),
+                    claim.getProductName(),
+                    "Bảo hành thu hồi máy hỏng — " + claim.getClaimNumber()
+                            + (claim.getIssueDescription() != null ? ": " + claim.getIssueDescription() : ""));
+            RefundDto.Detail refund = refundService.createFromWarranty(refundReq);
+            log.info("Refund request {} created for warranty claim {}", refund.getRefundCode(), claim.getClaimNumber());
+        } catch (Exception e) {
+            log.warn("Could not create refund request for warranty claim {}: {}",
+                    claim.getClaimNumber(), e.getMessage());
+        }
     }
 
     /** Kỹ thuật: cập nhật biên bản — RECEIVED/APPROVED → INSPECTING */
@@ -281,6 +515,15 @@ public class WarrantyClaimService {
                 if (claim.getProductItemId() != null) {
                     catalogClient.updateItemStatus(claim.getProductItemId(), "SOLD");
                 }
+            }
+            case REFUND -> {
+                claim.setStatus(WarrantyClaim.ClaimStatus.COMPLETED);
+                claim.setCompletedDate(LocalDateTime.now());
+                if (claim.getProductItemId() != null) {
+                    catalogClient.updateItemStatus(claim.getProductItemId(), "DEFECTIVE");
+                }
+                claimRepository.save(claim);
+                triggerRefundFromWarranty(claim);
             }
         }
 
@@ -412,6 +655,9 @@ public class WarrantyClaimService {
                 .isUnderWarranty(c.getIsUnderWarranty())
                 .returnCarrier(c.getReturnCarrier())
                 .returnTrackingCode(c.getReturnTrackingCode())
+                .ghnReturnShippingStatus(c.getGhnReturnShippingStatus())
+                .ghnReturnShippingStatusDisplay(ghnService.translateGHNStatus(c.getGhnReturnShippingStatus()))
+                .ghnReturnStatusUpdatedAt(c.getGhnReturnStatusUpdatedAt())
                 .returnInstruction(buildReturnInstruction(c))
                 .build();
     }
@@ -456,6 +702,9 @@ public class WarrantyClaimService {
                 .systemInfo(info)
                 .returnCarrier(c.getReturnCarrier())
                 .returnTrackingCode(c.getReturnTrackingCode())
+                .ghnReturnShippingStatus(c.getGhnReturnShippingStatus())
+                .ghnReturnShippingStatusDisplay(ghnService.translateGHNStatus(c.getGhnReturnShippingStatus()))
+                .ghnReturnStatusUpdatedAt(c.getGhnReturnStatusUpdatedAt())
                 .returnInstruction(buildReturnInstruction(c))
                 .build();
     }
@@ -476,28 +725,6 @@ public class WarrantyClaimService {
         }
         return "Gửi máy lỗi về kho qua " + carrier + ". Mã vận đơn / mã tra cứu: " + tracking
                 + " (hoặc ticket #" + c.getClaimNumber() + ").";
-    }
-
-    private java.util.Optional<String> tryCreateGhnReturnOrder(WarrantyClaim claim) {
-        return resolvePickupAddress(claim).flatMap(addr -> {
-            try {
-                GHNDto.CreateOrderResponse ghn = ghnService.createWarrantyReturnOrder(
-                        claim.getClaimNumber(),
-                        addr.name(),
-                        addr.phone(),
-                        addr.address(),
-                        addr.wardName(),
-                        addr.districtName(),
-                        addr.provinceName(),
-                        addr.districtId(),
-                        addr.wardCode(),
-                        claim.getProductName());
-                return java.util.Optional.of(ghn.getOrderCode());
-            } catch (Exception e) {
-                log.warn("GHN warranty return failed for {}: {}", claim.getClaimNumber(), e.getMessage());
-                return java.util.Optional.empty();
-            }
-        });
     }
 
     private record PickupAddress(
@@ -571,7 +798,7 @@ public class WarrantyClaimService {
             return;
         }
         String code = claim.getReturnTrackingCode();
-        if (code == null || code.isBlank() || code.startsWith("GHTK-")) {
+        if (code == null || code.isBlank() || isPlaceholderTrackingCode(code)) {
             return;
         }
         try {
@@ -608,6 +835,7 @@ public class WarrantyClaimService {
             case REPLACE -> "Đổi sản phẩm mới";
             case REPAIR_RETURN -> "Sửa chữa và gửi trả";
             case REJECT -> "Từ chối bảo hành";
+            case REFUND -> "Hoàn tiền";
         };
     }
 
@@ -675,6 +903,9 @@ public class WarrantyClaimService {
                 .systemImeiGrouped(formatImeiGrouped(systemImei))
                 .returnCarrier(c.getReturnCarrier())
                 .returnTrackingCode(c.getReturnTrackingCode())
+                .ghnReturnShippingStatus(c.getGhnReturnShippingStatus())
+                .ghnReturnShippingStatusDisplay(ghnService.translateGHNStatus(c.getGhnReturnShippingStatus()))
+                .ghnReturnStatusUpdatedAt(c.getGhnReturnStatusUpdatedAt())
                 .contactName(c.getContactName())
                 .status(c.getStatus().name())
                 .statusDisplay(statusDisplay(c.getStatus()))
@@ -728,7 +959,7 @@ public class WarrantyClaimService {
         try {
             return WarrantyClaim.FinalResolution.valueOf(v.toUpperCase().trim());
         } catch (IllegalArgumentException e) {
-            throw new BadRequestException("Phán quyết không hợp lệ. Chọn: REPLACE, REPAIR_RETURN, REJECT");
+            throw new BadRequestException("Phán quyết không hợp lệ. Chọn: REPLACE, REPAIR_RETURN, REJECT, REFUND");
         }
     }
 }

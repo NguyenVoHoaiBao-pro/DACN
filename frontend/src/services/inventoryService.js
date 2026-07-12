@@ -100,3 +100,11 @@ export const getInventoryTransactions = async () => {
   });
   return res.data;
 };
+
+export const fetchFifoSerials = async (variantId, limit = 20) => {
+  const res = await httpClient.get(`${ADMIN_INVENTORY_API}/serials/fifo`, {
+    params: { variantId, limit },
+    headers: getAuthHeaders(),
+  });
+  return res.data;
+};

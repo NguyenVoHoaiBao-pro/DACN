@@ -124,6 +124,13 @@ public class WarrantyClaim {
     @Column(name = "return_tracking_code", length = 100)
     private String returnTrackingCode;
 
+    /** Trạng thái vận chuyển thu hồi từ GHN webhook */
+    @Column(name = "ghn_return_shipping_status", length = 50)
+    private String ghnReturnShippingStatus;
+
+    @Column(name = "ghn_return_status_updated_at")
+    private LocalDateTime ghnReturnStatusUpdatedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "received_box_condition", length = 20)
     private ReceivedBoxCondition receivedBoxCondition;
@@ -190,7 +197,7 @@ public class WarrantyClaim {
     }
 
     public enum FinalResolution {
-        REPLACE, REPAIR_RETURN, REJECT
+        REPLACE, REPAIR_RETURN, REJECT, REFUND
     }
 
     public enum ReceivedBoxCondition {

@@ -29,6 +29,29 @@ export const getConversionRates = async () => unwrap(await httpClient.get(`${BAS
 
 export const getCustomerSegments = async () => unwrap(await httpClient.get(`${BASE_URL}/customer-segments`));
 
+export const getActionKpis = async () => unwrap(await httpClient.get(`${BASE_URL}/action-kpis`));
+
+export const getCategoryRevenueChart = async (startDate, endDate) => {
+  const params = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  return unwrap(await httpClient.get(`${BASE_URL}/revenue/by-category`, { params }));
+};
+
+export const getFinanceSummary = async (startDate, endDate) => {
+  const params = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  return unwrap(await httpClient.get(`${BASE_URL}/finance/summary`, { params }));
+};
+
+export const getFinanceLedger = async ({ startDate, endDate, page = 0, limit = 20 } = {}) => {
+  const params = { page, limit };
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  return unwrap(await httpClient.get(`${BASE_URL}/finance/ledger`, { params }));
+};
+
 export const getRevenue = async (params) => unwrap(await httpClient.get(`${BASE_URL}/revenue`, { params }));
 
 export const getTopProductsLegacy = async () => unwrap(await httpClient.get(`${BASE_URL}/top-products-legacy`));

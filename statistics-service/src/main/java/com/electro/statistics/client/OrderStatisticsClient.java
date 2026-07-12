@@ -39,4 +39,24 @@ public interface OrderStatisticsClient {
     // Thống kê xem khách hàng thích thanh toán bằng COD (Tiền mặt) hay VNPAY (Chuyển khoản) hơn.
     @GetMapping("/payment-methods")
     Map<String, Object> getPaymentMethodStats();
+
+    @GetMapping("/action-kpis")
+    Map<String, Object> getActionKpis();
+
+    @GetMapping("/revenue/by-product")
+    List<Map<String, Object>> getRevenueByProduct(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate);
+
+    @GetMapping("/finance/summary")
+    Map<String, Object> getFinanceSummary(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate);
+
+    @GetMapping("/finance/ledger")
+    Map<String, Object> getFinanceLedger(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int limit);
 }

@@ -3,19 +3,31 @@ package com.electro.order.service.payment;
 import com.electro.order.config.PaymentConfig;
 import com.electro.order.dto.PaymentDto;
 import com.electro.order.entity.Order;
+import com.electro.order.entity.PaymentTransaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Tích hợp VNPay Payment Gateway.
@@ -34,6 +46,20 @@ public class VNPayService {
 
     @Autowired
     private PaymentConfig paymentConfig;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private HttpClient httpClient;
+
+    @PostConstruct
+    void initHttpClient() {
+        if (paymentConfig.getVnpay().isTrustAllSsl()) {
+            log.warn("VNPay trust-all-SSL is ENABLED (payment.vnpay.trust-all-ssl=true). "
+                    + "Chỉ dùng dev local — không bật trên production.");
+            httpClient = createTrustAllSslHttpClient();
+        } else {
+            httpClient = HttpClient.newHttpClient();
+        }
+    }
 
     /**
      * Tạo URL thanh toán VNPay
@@ -170,6 +196,149 @@ public class VNPayService {
         }
     }
 
+    /**
+     * Gọi API hoàn tiền VNPay (full/partial refund).
+     * Checksum theo tài liệu VNPay: các field nối bằng "|", không dùng query-string như pay URL.
+     */
+    public PaymentDto.GatewayRefundResult refund(
+            PaymentTransaction originalTxn, BigDecimal amount, String refundReason) {
+        try {
+            PaymentConfig.VnPay vnpayConfig = paymentConfig.getVnpay();
+            if (originalTxn.getGatewayTransactionId() == null || originalTxn.getGatewayTransactionId().isBlank()) {
+                return PaymentDto.GatewayRefundResult.builder()
+                        .success(false)
+                        .message("Thiếu mã giao dịch VNPay gốc (gatewayTransactionId)")
+                        .build();
+            }
+
+            String requestId = String.valueOf(System.currentTimeMillis());
+            long refundAmount = amount.multiply(BigDecimal.valueOf(100)).longValue();
+            long originalAmount = originalTxn.getAmount() != null
+                    ? originalTxn.getAmount().multiply(BigDecimal.valueOf(100)).longValue()
+                    : refundAmount;
+            String transactionType = refundAmount >= originalAmount ? "02" : "03";
+
+            String createDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            String txnDate = originalTxn.getCreatedAt() != null
+                    ? originalTxn.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                    : createDate;
+
+            String txnRef = originalTxn.getTransactionRef();
+            String transactionNo = originalTxn.getGatewayTransactionId();
+            String orderInfo = refundReason != null && !refundReason.isBlank()
+                    ? refundReason : "Hoan tien don hang";
+            if (orderInfo.length() > 255) {
+                orderInfo = orderInfo.substring(0, 255);
+            }
+
+            String signData = buildRefundSignData(
+                    requestId,
+                    vnpayConfig.getVersion(),
+                    "refund",
+                    vnpayConfig.getTmnCode(),
+                    transactionType,
+                    txnRef,
+                    String.valueOf(refundAmount),
+                    transactionNo,
+                    txnDate,
+                    "admin",
+                    createDate,
+                    "127.0.0.1",
+                    orderInfo);
+            String secureHash = hmacSHA512(vnpayConfig.getHashSecret(), signData);
+
+            Map<String, String> vnpParams = new LinkedHashMap<>();
+            vnpParams.put("vnp_RequestId", requestId);
+            vnpParams.put("vnp_Version", vnpayConfig.getVersion());
+            vnpParams.put("vnp_Command", "refund");
+            vnpParams.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+            vnpParams.put("vnp_TransactionType", transactionType);
+            vnpParams.put("vnp_TxnRef", txnRef);
+            vnpParams.put("vnp_Amount", String.valueOf(refundAmount));
+            vnpParams.put("vnp_OrderInfo", orderInfo);
+            vnpParams.put("vnp_TransactionNo", transactionNo);
+            vnpParams.put("vnp_TransactionDate", txnDate);
+            vnpParams.put("vnp_CreateBy", "admin");
+            vnpParams.put("vnp_CreateDate", createDate);
+            vnpParams.put("vnp_IpAddr", "127.0.0.1");
+            vnpParams.put("vnp_SecureHash", secureHash);
+
+            String jsonBody = objectMapper.writeValueAsString(vnpParams);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(vnpayConfig.getApiUrl()))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            String body = httpResponse.body();
+            log.info("VNPay refund response: {}", body);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responseMap = objectMapper.readValue(body, Map.class);
+            String responseCode = responseMap.get("vnp_ResponseCode") != null
+                    ? responseMap.get("vnp_ResponseCode").toString() : null;
+            String responseMessage = responseMap.get("vnp_Message") != null
+                    ? responseMap.get("vnp_Message").toString() : null;
+            boolean success = "00".equals(responseCode);
+            String txnNo = responseMap.get("vnp_TransactionNo") != null
+                    ? responseMap.get("vnp_TransactionNo").toString() : requestId;
+
+            String message = success
+                    ? "Hoàn tiền VNPay thành công"
+                    : "VNPay refund failed: " + responseCode
+                            + (responseMessage != null ? " - " + responseMessage : "");
+
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(success)
+                    .gatewayRefundId(txnNo)
+                    .responseCode(responseCode)
+                    .message(message)
+                    .rawResponse(body)
+                    .build();
+        } catch (Exception e) {
+            log.error("VNPay refund error", e);
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Lỗi gọi API hoàn tiền VNPay: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * Checksum refund/querydr: field nối bằng "|" theo thứ tự tài liệu VNPay.
+     */
+    private static String buildRefundSignData(
+            String requestId,
+            String version,
+            String command,
+            String tmnCode,
+            String transactionType,
+            String txnRef,
+            String amount,
+            String transactionNo,
+            String transactionDate,
+            String createBy,
+            String createDate,
+            String ipAddr,
+            String orderInfo) {
+        return String.join("|",
+                requestId,
+                version,
+                command,
+                tmnCode,
+                transactionType,
+                txnRef,
+                amount,
+                transactionNo,
+                transactionDate,
+                createBy,
+                createDate,
+                ipAddr,
+                orderInfo);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Helper methods
     // ═══════════════════════════════════════════════════════════════════════════
@@ -235,6 +404,37 @@ public class VNPayService {
             return sb.toString();
         } catch (Exception e) {
             throw new RuntimeException("Error computing HMAC-SHA512", e);
+        }
+    }
+
+    /**
+     * Bỏ qua PKIX cho outbound HttpClient (refund API). Dev/sandbox only.
+     */
+    private static HttpClient createTrustAllSslHttpClient() {
+        try {
+            TrustManager[] trustAll = new TrustManager[]{
+                    new X509TrustManager() {
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        @Override
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[0];
+                        }
+                    }
+            };
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAll, new SecureRandom());
+            return HttpClient.newBuilder()
+                    .sslContext(sslContext)
+                    .build();
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot create VNPay trust-all SSL HttpClient", e);
         }
     }
 }

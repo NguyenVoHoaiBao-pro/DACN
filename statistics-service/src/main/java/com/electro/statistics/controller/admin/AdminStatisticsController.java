@@ -78,4 +78,36 @@ public class AdminStatisticsController {
     public ResponseEntity<TopProductsStatisticsDTO> getTopProductsStatistics() {
         return ResponseEntity.ok(statisticsService.getTopProductsStatistics());
     }
+
+    @GetMapping("/action-kpis")
+    @PreAuthorize("hasAnyAuthority('REPORT_REVENUE', 'REPORT_SALES', 'ROLE_ADMIN')")
+    public ResponseEntity<ActionKpisDTO> getActionKpis() {
+        return ResponseEntity.ok(statisticsService.getActionKpis());
+    }
+
+    @GetMapping("/revenue/by-category")
+    @PreAuthorize("hasAnyAuthority('REPORT_REVENUE', 'ROLE_ADMIN')")
+    public ResponseEntity<CategoryRevenueChartDTO> getCategoryRevenueChart(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return ResponseEntity.ok(statisticsService.getCategoryRevenueChart(startDate, endDate));
+    }
+
+    @GetMapping("/finance/summary")
+    @PreAuthorize("hasAnyAuthority('REPORT_REVENUE', 'ROLE_ADMIN')")
+    public ResponseEntity<FinanceSummaryDTO> getFinanceSummary(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return ResponseEntity.ok(statisticsService.getFinanceSummary(startDate, endDate));
+    }
+
+    @GetMapping("/finance/ledger")
+    @PreAuthorize("hasAnyAuthority('REPORT_REVENUE', 'ROLE_ADMIN')")
+    public ResponseEntity<FinanceLedgerDTO> getFinanceLedger(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(statisticsService.getFinanceLedger(startDate, endDate, page, limit));
+    }
 }

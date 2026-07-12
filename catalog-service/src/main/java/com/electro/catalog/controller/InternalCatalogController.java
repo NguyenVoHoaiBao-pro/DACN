@@ -6,6 +6,7 @@ import com.electro.catalog.exception.ResourceNotFoundException;
 import com.electro.catalog.repository.ProductVariantRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,8 +23,9 @@ public class InternalCatalogController {
     private String serverUrl;
 
     @GetMapping("/variants/{variantId}/cart-info")
+    @Transactional(readOnly = true)
     public CartDto.CartVariantDto getVariantForCart(@PathVariable("variantId") Integer variantId) {
-        ProductVariant variant = productVariantRepository.findById(variantId)
+        ProductVariant variant = productVariantRepository.findByIdWithProductAndImages(variantId)
                 .orElseThrow(() -> new ResourceNotFoundException("ProductVariant", "id", variantId));
 
         CartDto.CartVariantDto vd = new CartDto.CartVariantDto();

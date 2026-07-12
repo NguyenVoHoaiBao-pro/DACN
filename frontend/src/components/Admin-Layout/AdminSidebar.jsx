@@ -16,17 +16,21 @@ import {
   Forum as ForumIcon,
   ViewKanban as KanbanIcon,
   QrCode2 as QrCodeIcon,
+  AccountBalance as BankIcon,
+  Savings as FinanceIcon,
   AssignmentReturn as ReturnIcon,
+  ReceiptLong as PoIcon,
   Style as StyleIcon,
   ConfirmationNumber as CouponIcon,
   Business as BusinessIcon,
   RateReview as ReviewIcon,
+  FactCheck as FactCheckIcon,
 } from "@mui/icons-material";
-import { cloneElement } from "react";
-
+import { cloneElement, useCallback, useEffect, useState } from "react";
 
 import {
   Avatar,
+  Badge,
   Box,
   List,
   ListItem,
@@ -37,10 +41,47 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../../hooks/usePermissions";
+import { fetchWarehousePoQueue } from "../../services/purchaseOrderService";
+import { isApiSuccess } from "../../utils/apiResponse";
+import { getUnseenWarehousePos } from "../../utils/warehousePoAlerts";
+
+/**
+ * Sidebar Nhân viên Kho — chỉ nghiệp vụ nhập/xuất kho (không quản lý đơn bán CRUD).
+ */
+const WAREHOUSE_MENU_PATHS = new Set([
+  "/admin",
+  "/admin/purchase-orders",
+  "/admin/warehouse-fulfillment",
+  "/admin/inventory",
+  "/admin/inventory-audit",
+  "/admin/imei",
+  "/admin/return",
+  "/admin/warranty-inbound",
+]);
 
 const AdminSidebar = ({ currentPage, collapsed = false }) => {
   const navigate = useNavigate();
-  const { hasAnyPermission } = usePermissions();
+  const { hasAnyPermission, isWarehouseUser, isSalesUser, isAdminUser } = usePermissions();
+  const warehouseOnly = isWarehouseUser && !isAdminUser && !isSalesUser;
+  const [poBadge, setPoBadge] = useState(0);
+
+  const refreshPoBadge = useCallback(async () => {
+    if (!warehouseOnly && !hasAnyPermission(["STOCK_IMPORT"])) return;
+    try {
+      const res = await fetchWarehousePoQueue("");
+      if (isApiSuccess(res) && Array.isArray(res.data)) {
+        setPoBadge(getUnseenWarehousePos(res.data).length);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [warehouseOnly, hasAnyPermission]);
+
+  useEffect(() => {
+    refreshPoBadge();
+    const t = setInterval(refreshPoBadge, 60000);
+    return () => clearInterval(t);
+  }, [refreshPoBadge]);
 
   const allMenuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/admin", req: ["REPORT_REVENUE", "REPORT_SALES", "ORDER_VIEW_ALL"] },
@@ -50,38 +91,52 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
     { text: "Đơn hàng", icon: <OrdersIcon />, path: "/admin/orders", req: ["ORDER_VIEW_ALL"] },
     { text: "Chat đa kênh", icon: <ForumIcon />, path: "/admin/sales/chat", req: ["ORDER_VIEW_ALL", "CUSTOMER_VIEW"] },
     { text: "Pipeline & HH", icon: <KanbanIcon />, path: "/admin/sales/pipeline", req: ["ORDER_VIEW_ALL", "REPORT_SALES"] },
+    { text: "Yêu cầu trả hàng", icon: <ReturnIcon />, path: "/admin/sales/return-requests", req: ["RETURN_REQUEST_REVIEW", "ORDER_VIEW_ALL"] },
     { text: "Cấu hình KPI", icon: <KanbanIcon />, path: "/admin/sales/kpi-config", req: ["USER_MANAGE"] },
+    { text: "Quản lý mua hàng", icon: <PoIcon />, path: "/admin/procurement", req: ["PRODUCT_MANAGE"] },
+    { text: "Duyệt chứng từ", icon: <PoIcon />, path: "/admin/po-management", req: ["PRODUCT_MANAGE"] },
+    { text: "Đơn mua hàng", icon: <PoIcon />, path: "/admin/purchase-orders", req: ["STOCK_IMPORT"], badgeKey: "warehousePo" },
+    { text: "Đơn hàng cần xuất", icon: <OrdersIcon />, path: "/admin/warehouse-fulfillment", req: ["ORDER_ASSIGN_SHIPPING"] },
     { text: "Tồn kho", icon: <WarehouseIcon />, path: "/admin/inventory", req: ["INVENTORY_STAT"] },
+    { text: "Kiểm kê kho", icon: <WarehouseIcon />, path: "/admin/inventory-audit", req: ["STOCK_IMPORT"] },
+    { text: "Duyệt phiếu kiểm kê", icon: <FactCheckIcon />, path: "/admin/inventory-audit-approval", req: ["PRODUCT_MANAGE", "USER_MANAGE"] },
+    { text: "Quản lý hoàn tiền", icon: <BankIcon />, path: "/admin/refunds", req: ["REFUND_VIEW", "REFUND_BANK_INFO", "REFUND_APPROVE", "USER_MANAGE"] },
     { text: "Hồ sơ khách hàng", icon: <CustomerProfileIcon />, path: "/admin/customers", req: ["CUSTOMER_VIEW"] },
     { text: "Người dùng", icon: <PeopleIcon />, path: "/admin/users", req: ["USER_MANAGE"] },
     { text: "Banner", icon: <BannerIcon />, path: "/admin/banners", req: ["BANNER_MANAGE"] },
     { text: "Bài viết", icon: <ArticleIcon />, path: "/admin/posts", req: ["POST_MANAGE"] },
     { text: "Bảo hành", icon: <ShieldIcon />, path: "/admin/warranty", req: ["WARRANTY_MANAGE"] },
     { text: "Yêu cầu BH online", icon: <WarrantyClaimIcon />, path: "/admin/warranty-claims", req: ["WARRANTY_MANAGE", "CUSTOMER_VIEW"] },
-    { text: "Nhập IMEI", icon: <QrCodeIcon />, path: "/admin/imei", req: ["IMEI_MANAGE"] },
-    { text: "Trả hàng", icon: <ReturnIcon />, path: "/admin/return", req: ["STOCK_RETURN"] },
+    { text: "Nhập Serial", icon: <QrCodeIcon />, path: "/admin/imei", req: ["IMEI_MANAGE"] },
+    { text: "Xử lý hàng hoàn", icon: <ReturnIcon />, path: "/admin/return", req: ["STOCK_RETURN"] },
     { text: "Tiếp nhận BH", icon: <WarrantyClaimIcon />, path: "/admin/warranty-inbound", req: ["STOCK_IMPORT", "IMEI_MANAGE"] },
     { text: "Mã giảm giá", icon: <CouponIcon />, path: "/admin/coupons", req: ["PRODUCT_MANAGE"] },
     { text: "Thương hiệu", icon: <BusinessIcon />, path: "/admin/producers", req: ["PRODUCT_MANAGE"] },
     { text: "Đánh giá", icon: <ReviewIcon />, path: "/admin/reviews", req: ["PRODUCT_MANAGE"] },
 
     { text: "Thống kê", icon: <AnalyticsIcon />, path: "/admin/analytics", req: ["REPORT_REVENUE"] },
+    { text: "Sổ cái", icon: <FinanceIcon />, path: "/admin/finance", req: ["REPORT_REVENUE"] },
 
     { text: "Cài đặt", icon: <SettingsIcon />, path: "/admin/settings", req: ["ROLE_PERM_EDIT"] },
   ];
 
-  const menuItems = allMenuItems.filter(i => i.req.length === 0 || hasAnyPermission(i.req));
+  const menuItems = allMenuItems.filter((i) => {
+    if (i.req.length > 0 && !hasAnyPermission(i.req)) return false;
+    if (warehouseOnly) return WAREHOUSE_MENU_PATHS.has(i.path);
+    return true;
+  });
 
   const handleNavigation = (path) => {
     navigate(path);
   };
 
   return (
-    <Box sx={{ height: "100%", overflow: "hidden" }}>
-      {/* Brand Header Section - Thêm padding-top để tránh bị che */}
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Brand Header — cố định phía trên */}
       <Box
         sx={{
-          pt: collapsed ? 2.5 : 3, // 🔥 THÊM: Padding-top để đẩy xuống
+          flexShrink: 0,
+          pt: collapsed ? 2.5 : 3,
           pb: collapsed ? 1.5 : 2,
           px: collapsed ? 1 : 3,
           backgroundColor: "#ffffff",
@@ -136,8 +191,25 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
           </Box>
         )}
       </Box>
-      {/* Navigation Menu */}
-      <List sx={{ pt: 0.5, backgroundColor: "#ffffff" }}>
+      {/* Menu — cuộn khi vượt chiều cao màn hình */}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          scrollbarWidth: "thin",
+          scrollbarColor: "#cbd5e1 transparent",
+          "&::-webkit-scrollbar": { width: 6 },
+          "&::-webkit-scrollbar-track": { background: "transparent" },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: "#cbd5e1",
+            borderRadius: 3,
+            "&:hover": { backgroundColor: "#94a3b8" },
+          },
+        }}
+      >
+      <List sx={{ pt: 0.5, pb: 2, backgroundColor: "#ffffff" }}>
         {menuItems.map((item) => (
           <ListItem
             key={item.text}
@@ -190,7 +262,15 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
               </ListItemIcon>
               {!collapsed && (
                 <ListItemText
-                  primary={item.text}
+                  primary={
+                    item.badgeKey === "warehousePo" && poBadge > 0 ? (
+                      <Badge badgeContent={poBadge} color="error" sx={{ "& .MuiBadge-badge": { right: -12 } }}>
+                        <span>{item.text}</span>
+                      </Badge>
+                    ) : (
+                      item.text
+                    )
+                  }
                   sx={{ my: 0 }}
                   primaryTypographyProps={{
                     fontWeight: currentPage === item.text ? 600 : 400,
@@ -205,6 +285,7 @@ const AdminSidebar = ({ currentPage, collapsed = false }) => {
           </ListItem>
         ))}
       </List>
+      </Box>
     </Box>
   );
 };

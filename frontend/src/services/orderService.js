@@ -90,6 +90,18 @@ export const getMyAddresses = async () => {
 /**
  * GET /api/admin/orders — Danh sách tất cả đơn hàng
  */
+export const fetchWarehouseFulfillmentQueue = async (page = 0, size = 20) => {
+  const res = await httpClient.get(`${ADMIN_API}/warehouse/fulfillment-queue`, {
+    params: { page, size },
+  });
+  return res.data?.data;
+};
+
+/** Bắt đầu gom hàng: CONFIRMED → PROCESSING */
+export const startWarehousePicking = async (orderId) => {
+  return adminUpdateOrderStatus(orderId, { status: "PROCESSING" });
+};
+
 export const adminGetOrders = async (
   page = 0,
   size = 10,

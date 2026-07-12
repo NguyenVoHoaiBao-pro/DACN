@@ -5,7 +5,9 @@ import com.electro.catalog.entity.ProductItem;
 import com.electro.catalog.entity.ProductItemStatus;
 import com.electro.catalog.exception.BadRequestException;
 import com.electro.catalog.exception.ResourceNotFoundException;
+import com.electro.catalog.entity.ProductVariant;
 import com.electro.catalog.repository.ProductItemRepository;
+import com.electro.catalog.repository.ProductVariantRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,9 @@ public class ProductItemService {
 
     @Autowired
     private ProductItemRepository productItemRepository;
+
+    @Autowired
+    private ProductVariantRepository productVariantRepository;
 
     @Transactional(readOnly = true)
     public ProductItemDto.Response findByImeiOrSerial(String value) {
@@ -46,7 +51,17 @@ public class ProductItemService {
         }
         item.setStatus(ProductItemStatus.RESERVED);
         item.setReservedAt(LocalDateTime.now());
-        return toResponse(productItemRepository.save(item));
+        productItemRepository.save(item);
+
+        ProductVariant variant = item.getVariant();
+        if (variant != null) {
+            int current = variant.getStockQuantity() != null ? variant.getStockQuantity() : 0;
+            if (current > 0) {
+                variant.setStockQuantity(current - 1);
+                productVariantRepository.save(variant);
+            }
+        }
+        return toResponse(item);
     }
 
     public void releaseItem(Integer id) {

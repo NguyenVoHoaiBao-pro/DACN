@@ -33,46 +33,13 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Products retrieved successfully", products));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ProductDto.Response>> getProductById(@PathVariable("id") Integer id) {
-        ProductDto.Response product = productService.getProductById(id.longValue());
-        return ResponseEntity.ok(ApiResponse.success("Product retrieved successfully", product));
-    }
-
-    @GetMapping("/{id}/variants")
-    public ResponseEntity<ApiResponse<List<ProductDto.VariantDto>>> getVariantsByProductId(@PathVariable("id") Integer id) {
-        List<ProductDto.VariantDto> variants = productService.getVariantsByProductId(id.longValue());
-        return ResponseEntity.ok(ApiResponse.success("Product variants retrieved successfully", variants));
-    }
-
-    @GetMapping("/sku/{sku}")
-    public ResponseEntity<ApiResponse<ProductDto.Response>> getProductBySku(@PathVariable("sku") String sku) {
-        ProductDto.Response product = productService.getProductBySku(sku);
-        return ResponseEntity.ok(ApiResponse.success("Product retrieved successfully", product));
-    }
-
-    @PostMapping
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
-    public ResponseEntity<ApiResponse<ProductDto.Response>> createProduct(@Valid @RequestBody ProductDto.CreateRequest createRequest) {
-        ProductDto.Response product = productService.createProduct(createRequest);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Product created successfully", product));
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
-    public ResponseEntity<ApiResponse<ProductDto.Response>> updateProduct(
-            @PathVariable("id") Integer id,
-            @Valid @RequestBody ProductDto.UpdateRequest updateRequest) {
-        ProductDto.Response product = productService.updateProduct(id.longValue(), updateRequest);
-        return ResponseEntity.ok(ApiResponse.success("Product updated successfully", product));
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
-    public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable("id") Integer id) {
-        productService.deleteProduct(id.longValue());
-        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
+    @GetMapping("/suggest")
+    public ResponseEntity<ApiResponse<List<ProductDto.AutocompleteItem>>> suggestProducts(
+            @RequestParam(name = "q") String q,
+            @RequestParam(value = "product_type_id", required = false) Integer productTypeId,
+            @RequestParam(name = "limit", defaultValue = "8") int limit) {
+        List<ProductDto.AutocompleteItem> items = productService.suggestProducts(q, productTypeId, limit);
+        return ResponseEntity.ok(ApiResponse.success("Product suggestions", items));
     }
 
     @GetMapping("/search")
@@ -165,6 +132,48 @@ public class ProductController {
         Pageable pageable = PageRequest.of(page, size);
         Page<ProductDto.Response> products = productService.getFeaturedProducts(pageable);
         return ResponseEntity.ok(ApiResponse.success("Featured products retrieved successfully", products));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<ProductDto.Response>> getProductById(@PathVariable("id") Integer id) {
+        ProductDto.Response product = productService.getProductById(id.longValue());
+        return ResponseEntity.ok(ApiResponse.success("Product retrieved successfully", product));
+    }
+
+    @GetMapping("/{id}/variants")
+    public ResponseEntity<ApiResponse<List<ProductDto.VariantDto>>> getVariantsByProductId(@PathVariable("id") Integer id) {
+        List<ProductDto.VariantDto> variants = productService.getVariantsByProductId(id.longValue());
+        return ResponseEntity.ok(ApiResponse.success("Product variants retrieved successfully", variants));
+    }
+
+    @GetMapping("/sku/{sku}")
+    public ResponseEntity<ApiResponse<ProductDto.Response>> getProductBySku(@PathVariable("sku") String sku) {
+        ProductDto.Response product = productService.getProductBySku(sku);
+        return ResponseEntity.ok(ApiResponse.success("Product retrieved successfully", product));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    public ResponseEntity<ApiResponse<ProductDto.Response>> createProduct(@Valid @RequestBody ProductDto.CreateRequest createRequest) {
+        ProductDto.Response product = productService.createProduct(createRequest);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Product created successfully", product));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    public ResponseEntity<ApiResponse<ProductDto.Response>> updateProduct(
+            @PathVariable("id") Integer id,
+            @Valid @RequestBody ProductDto.UpdateRequest updateRequest) {
+        ProductDto.Response product = productService.updateProduct(id.longValue(), updateRequest);
+        return ResponseEntity.ok(ApiResponse.success("Product updated successfully", product));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('PRODUCT_MANAGE')")
+    public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable("id") Integer id) {
+        productService.deleteProduct(id.longValue());
+        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
     }
 
 }

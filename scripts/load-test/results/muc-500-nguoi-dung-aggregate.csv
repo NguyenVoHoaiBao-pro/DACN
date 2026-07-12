@@ -1,0 +1,14 @@
+Milestone,Mức 500 Người Dùng
+Threads,500
+RampUpSeconds,60
+DurationSeconds,300
+TotalSamples,2500
+ErrorRateTotal,0.000%
+
+Label,# Samples,Average,Median,90% Line,95% Line,99% Line,Min,Max,Error %,Throughput,Received KB/sec,Sent KB/sec
+POST - Login,500,127,127,138,141,147,98,154,0.000%,4.14302,5.78,1.08
+GET - Cart,500,22,22,24,26,37,16,147,0.000%,4.13709,2.62,2.40
+GET - Products,500,1056,1005,2047,2275,2451,128,2606,0.000%,4.12426,72.13,2.47
+POST - Chatbot,500,22066,20597,32580,33102,34251,4471,35125,0.000%,3.36279,3.01,2.22
+GET - Recommend,500,48,44,71,83,146,25,212,0.000%,3.50096,2.66,2.09
+TOTAL,2500,4664,127,20597,30742,33102,16,35125,0.000%,15.97648,67.66,8.62

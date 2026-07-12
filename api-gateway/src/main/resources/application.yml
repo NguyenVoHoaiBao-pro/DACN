@@ -24,6 +24,16 @@ spring:
             allowedOriginPatterns:
               - "http://localhost:*"
               - "http://127.0.0.1:*"
+              # Dev LAN — truy cap frontend qua IP (QR login, test dien thoai)
+              - "http://10.*"
+              - "http://192.168.*"
+              - "http://172.16.*"
+              - "http://172.17.*"
+              - "http://172.18.*"
+              - "http://172.19.*"
+              - "http://172.2*"
+              - "http://172.30.*"
+              - "http://172.31.*"
             allowedMethods:
               - GET
               - POST
@@ -75,12 +85,12 @@ spring:
         - id: catalog-service
           uri: lb://catalog-service
           predicates:
-            - Path=/api/products/**, /api/categories/**, /api/producers/**, /api/admin/products/**, /api/admin/sales-consultation/**, /api/admin/inventory/**, /api/admin/suppliers/**, /api/admin/purchase-orders/**, /api/admin/categories/**, /api/admin/producers/**, /api/admin/attributes/**, /api/admin/attribute-values/**, /api/admin/banners/**, /api/admin/posts/**, /img/**
+            - Path=/api/products/**, /api/categories/**, /api/producers/**, /api/admin/products/**, /api/admin/sales-consultation/**, /api/admin/inventory/**, /api/admin/inventory-audits/**, /api/admin/suppliers/**, /api/admin/purchase-orders/**, /api/admin/categories/**, /api/admin/producers/**, /api/admin/attributes/**, /api/admin/attribute-values/**, /api/admin/banners/**, /api/admin/posts/**, /img/**
 
         - id: order-service
           uri: lb://order-service
           predicates:
-            - Path=/api/orders/**, /api/admin/orders/**, /api/admin/sales/**, /api/admin/warranty/**, /api/warranty/**, /api/public/warranty/**, /api/payments/**, /api/payment/**, /api/ghn/**, /api/shipping/**, /api/coupons/**, /api/admin/coupons/**
+            - Path=/api/orders/**, /api/admin/orders/**, /api/admin/refunds/**, /api/admin/sales/**, /api/admin/warranty/**, /api/warranty/**, /api/public/warranty/**, /api/payments/**, /api/payment/**, /api/ghn/**, /api/shipping/**, /api/coupons/**, /api/admin/coupons/**
 
         - id: review-service
           uri: lb://review-service

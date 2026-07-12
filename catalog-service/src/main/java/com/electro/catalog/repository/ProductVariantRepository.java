@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProductVariantRepository extends JpaRepository<ProductVariant, Integer> {
@@ -17,14 +19,30 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
            "WHERE v.product.productType.id = :categoryId AND v.isActive = true")
     List<ProductVariant> findByCategoryId(@Param("categoryId") Integer categoryId);
 
+    @Query("SELECT DISTINCT v FROM ProductVariant v " +
+           "JOIN FETCH v.product p " +
+           "JOIN p.productType pt " +
+           "WHERE v.isActive = true " +
+           "AND (pt.id = :categoryId OR pt.parent.id = :categoryId)")
+    List<ProductVariant> findActiveByCategoryWithProduct(@Param("categoryId") Integer categoryId);
+
     @Query("SELECT v FROM ProductVariant v " +
            "LEFT JOIN FETCH v.attributeValues av " +
            "LEFT JOIN FETCH av.attribute " +
            "WHERE v.product.id = :productId")
     List<ProductVariant> findByProductId(Integer productId);
 
+    @Query("SELECT DISTINCT v FROM ProductVariant v " +
+           "LEFT JOIN FETCH v.attributeValues av " +
+           "LEFT JOIN FETCH av.attribute " +
+           "WHERE v.product.id IN :productIds AND v.isActive = true")
+    List<ProductVariant> findActiveByProductIds(@Param("productIds") Collection<Integer> productIds);
+
     @Query("SELECT v FROM ProductVariant v LEFT JOIN FETCH v.product WHERE v.id IN :ids")
     List<ProductVariant> findAllByIdWithProduct(@Param("ids") java.util.Collection<Integer> ids);
+
+    @Query("SELECT v FROM ProductVariant v JOIN FETCH v.product p LEFT JOIN FETCH p.images WHERE v.id = :id")
+    Optional<ProductVariant> findByIdWithProductAndImages(@Param("id") Integer id);
 
     java.util.Optional<ProductVariant> findBySkuCode(String skuCode);
 

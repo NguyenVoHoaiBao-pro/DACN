@@ -3,6 +3,7 @@ package com.electro.order.service.payment;
 import com.electro.order.config.PaymentConfig;
 import com.electro.order.dto.PaymentDto;
 import com.electro.order.entity.Order;
+import com.electro.order.entity.PaymentTransaction;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,6 +201,86 @@ public class MomoService {
                     .success(false)
                     .verified(false)
                     .message("Lỗi xác thực callback Momo: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * Gọi API hoàn tiền MoMo.
+     */
+    public PaymentDto.GatewayRefundResult refund(
+            PaymentTransaction originalTxn, BigDecimal amount, String refundReason) {
+        try {
+            PaymentConfig.Momo momoConfig = paymentConfig.getMomo();
+            if (originalTxn.getGatewayTransactionId() == null || originalTxn.getGatewayTransactionId().isBlank()) {
+                return PaymentDto.GatewayRefundResult.builder()
+                        .success(false)
+                        .message("Thiếu mã giao dịch MoMo gốc (transId)")
+                        .build();
+            }
+
+            String refundOrderId = "RF_" + originalTxn.getTransactionRef() + "_" + System.currentTimeMillis();
+            String requestId = refundOrderId;
+            long refundAmount = amount.longValue();
+            String description = refundReason != null ? refundReason : "Hoan tien don hang";
+
+            String rawSignature = "accessKey=" + momoConfig.getAccessKey()
+                    + "&amount=" + refundAmount
+                    + "&description=" + description
+                    + "&orderId=" + refundOrderId
+                    + "&partnerCode=" + momoConfig.getPartnerCode()
+                    + "&requestId=" + requestId
+                    + "&transId=" + originalTxn.getGatewayTransactionId();
+
+            String signature = hmacSHA256(momoConfig.getSecretKey(), rawSignature);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("partnerCode", momoConfig.getPartnerCode());
+            requestBody.put("orderId", refundOrderId);
+            requestBody.put("requestId", requestId);
+            requestBody.put("amount", refundAmount);
+            requestBody.put("transId", Long.parseLong(originalTxn.getGatewayTransactionId()));
+            requestBody.put("lang", "vi");
+            requestBody.put("description", description);
+            requestBody.put("signature", signature);
+
+            String jsonBody = objectMapper.writeValueAsString(requestBody);
+            String refundUrl = momoConfig.getRefundUrl() != null
+                    ? momoConfig.getRefundUrl()
+                    : "https://test-payment.momo.vn/v2/gateway/api/refund";
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(refundUrl))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            String body = httpResponse.body();
+            log.info("MoMo refund response: {}", body);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responseMap = objectMapper.readValue(body, Map.class);
+            int resultCode = responseMap.get("resultCode") != null
+                    ? ((Number) responseMap.get("resultCode")).intValue() : -1;
+            boolean success = resultCode == 0;
+            String transId = responseMap.get("transId") != null
+                    ? responseMap.get("transId").toString() : refundOrderId;
+            String message = responseMap.get("message") != null
+                    ? responseMap.get("message").toString() : "";
+
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(success)
+                    .gatewayRefundId(transId)
+                    .responseCode(String.valueOf(resultCode))
+                    .message(success ? "Hoàn tiền MoMo thành công" : "MoMo refund failed: " + message)
+                    .rawResponse(body)
+                    .build();
+        } catch (Exception e) {
+            log.error("MoMo refund error", e);
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Lỗi gọi API hoàn tiền MoMo: " + e.getMessage())
                     .build();
         }
     }

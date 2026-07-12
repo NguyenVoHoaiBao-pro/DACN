@@ -151,6 +151,18 @@ public class ProductDto {
         private int size = 10;
     }
 
+    /** Gợi ý tìm kiếm nhanh (autocomplete) — payload nhẹ */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AutocompleteItem {
+        private Integer id;
+        private String name;
+        private Double price;
+        private String imageUrl;
+        private String categoryName;
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

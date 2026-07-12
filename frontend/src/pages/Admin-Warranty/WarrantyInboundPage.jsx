@@ -33,6 +33,7 @@ import {
 } from "../../services/warrantyService";
 import { compareImei, formatImeiGrouped } from "../../utils/warrantyInboundUtils";
 import { isApiSuccess } from "../../utils/apiResponse";
+import GhnStatusBadge from "../../components/Shipping/GhnStatusBadge";
 
 const emptyForm = () => ({
   keyword: "",
@@ -108,8 +109,11 @@ const WarrantyInboundPage = () => {
         boxCondition: form.boxCondition,
         warehouseNotes: form.warehouseNotes.trim(),
       });
-      if (isApiSuccess(res)) {
-        toast.success(`Đã nhận máy — ticket #${form.claim.claimNumber} → Chờ kiểm tra kỹ thuật`);
+        if (isApiSuccess(res)) {
+        toast.success(
+          `Đã nhận máy — ticket #${form.claim.claimNumber} → Hoàn tiền (RF) chờ Admin/Sales duyệt`,
+          { autoClose: 6000 },
+        );
         resetScreen();
       }
     } catch (err) {
@@ -131,7 +135,7 @@ const WarrantyInboundPage = () => {
               Tiếp nhận Hàng Bảo hành
             </Typography>
             <Typography color="text.secondary">
-              Nhập tay mã vận đơn / mã ticket → đối chiếu IMEI → xác nhận nhận máy (RECEIVED)
+              Nhập mã vận đơn / mã ticket → đối chiếu IMEI → xác nhận nhận máy hỏng → tự tạo yêu cầu hoàn tiền (RF)
             </Typography>
           </Box>
         </Box>
@@ -199,6 +203,15 @@ const WarrantyInboundPage = () => {
                       <strong>Mã vận đơn:</strong>{" "}
                       <span style={{ fontFamily: "monospace" }}>{c.returnTrackingCode || "—"}</span>
                     </Typography>
+                    {(c.ghnReturnShippingStatus || c.ghnReturnShippingStatusDisplay) && (
+                      <Box sx={{ mt: 1, mb: 1 }}>
+                        <GhnStatusBadge
+                          status={c.ghnReturnShippingStatus}
+                          statusDisplay={c.ghnReturnShippingStatusDisplay}
+                          updatedAt={c.ghnReturnStatusUpdatedAt}
+                        />
+                      </Box>
+                    )}
                     <Box sx={{ mt: 2, p: 2, bgcolor: "#fef2f2", borderRadius: 2, border: "1px solid #fecaca" }}>
                       <Typography variant="caption" color="error" fontWeight="bold" display="block">
                         IMEI gốc (chia cụm 4 số)
@@ -309,7 +322,7 @@ const WarrantyInboundPage = () => {
                 {submitting ? (
                   <CircularProgress size={24} color="inherit" />
                 ) : (
-                  "XÁC NHẬN NHẬN MÁY (RECEIVED)"
+                  "XÁC NHẬN NHẬN MÁY & TẠO HOÀN TIỀN"
                 )}
               </Button>
               <Button variant="outlined" color="inherit" size="large" startIcon={<ResetIcon />} onClick={resetScreen}>

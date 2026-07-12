@@ -4,17 +4,22 @@ spring:
   config:
     import: "optional:configserver:http://localhost:8888"
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:mysql-11ae5c82-cjcakvalvajvjallh.i.aivencloud.com}:${MYSQL_PORT:28570}/electro_catalog_db?useSSL=${MYSQL_USE_SSL:true}&requireSSL=${MYSQL_REQUIRE_SSL:true}&sslMode=${MYSQL_SSL_MODE:REQUIRED}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
-    username: ${MYSQL_USER:avnadmin}
-    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/electro_catalog_db?useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    open-in-view: false
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
+        default_batch_fetch_size: 20
+
+cache:
+  product-list-ttl-seconds: 60
 
 server:
   port: 8082

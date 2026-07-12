@@ -1,16 +1,16 @@
 /**
- * IMEI MANAGEMENT PAGE — Admin Dashboard (Phase 2)
+ * SERIAL MANAGEMENT PAGE — Nhập kho theo PO
  *
- * Trang quản lý nhập IMEI/Serial Number hoàn chỉnh:
- *  - Autocomplete tìm variant (API 1)
- *  - Nhập IMEI thủ công / quét súng (API 2)
+ * Trang quản lý nhập Serial Number:
+ *  - Chọn PO → chọn dòng SP → quét Serial (API 2)
  *  - Upload file Excel hàng loạt (API 3)
  *  - Báo cáo tồn kho thấp (API 5)
  *
- * Yêu cầu: JWT Token + Permission IMEI_MANAGE
+ * IMEI: dự phòng triển khai sau. Hiện chỉ lưu serial_number.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Alert,
   Autocomplete,
@@ -54,14 +54,19 @@ import {
   Close as CloseIcon,
   UploadFile as UploadFileIcon,
   Assessment as StatsIcon,
+  ReceiptLong as PoIcon,
 } from "@mui/icons-material";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   importImeis,
   searchVariants,
-  uploadImeiExcel,
   getLowStockStats,
 } from "../../services/inventoryService";
+import { fetchPoImeiQueue, fetchPoDetail, fetchPoStockLots } from "../../services/purchaseOrderService";
+import { isApiSuccess } from "../../utils/apiResponse";
+import { getStoredUserId } from "../../utils/authSession";
+import { parseSerialsFromExcelFile } from "../../utils/parseSerialsFromExcel";
 
 // ─── DEBOUNCE HOOK ───────────────────────────────────────────────────────────
 function useDebounce(value, delay) {
@@ -99,6 +104,23 @@ const btnPrimary = {
 // COMPONENT CHÍNH
 // ═════════════════════════════════════════════════════════════════════════════
 const ImeiManagementPage = () => {
+  const [searchParams] = useSearchParams();
+  const urlPoId = searchParams.get("poId");
+  const urlPoNumber = searchParams.get("poNumber");
+  const urlLotId = searchParams.get("lotId");
+  const urlLotNumber = searchParams.get("lotNumber");
+  const { isWarehouseUser, isAdminUser, isSalesUser } = usePermissions();
+  const warehousePoRequired = isWarehouseUser && !isAdminUser && !isSalesUser;
+
+  // ─── PO LINKED WORKFLOW ───
+  const [poOptions, setPoOptions] = useState([]);
+  const [selectedPo, setSelectedPo] = useState(null);
+  const [poDetail, setPoDetail] = useState(null);
+  const [selectedPoItem, setSelectedPoItem] = useState(null);
+  const [poLoading, setPoLoading] = useState(false);
+  const [lotOptions, setLotOptions] = useState([]);
+  const [selectedLot, setSelectedLot] = useState(null);
+
   // ─── TAB STATE ───
   const [activeTab, setActiveTab] = useState(0);
 
@@ -111,8 +133,8 @@ const ImeiManagementPage = () => {
 
   // ─── MANUAL IMEI INPUT STATE ───
   const [imeiText, setImeiText] = useState("");
-  const [batchNumber, setBatchNumber] = useState("");
-  const [note, setNote] = useState("");
+  const [batchNumber, setBatchNumber] = useState(urlLotNumber || urlPoNumber || "");
+  const [note, setNote] = useState(urlPoNumber ? `Nhập Serial từ đơn mua hàng ${urlPoNumber}` : "");
   const [submitLoading, setSubmitLoading] = useState(false);
 
   // ─── EXCEL UPLOAD STATE ───
@@ -132,8 +154,116 @@ const ImeiManagementPage = () => {
     setToast({ open: true, message, severity });
   };
 
+  const loadPoDetail = useCallback(async (id) => {
+    if (!id) return;
+    setPoLoading(true);
+    try {
+      const res = await fetchPoDetail(id);
+      if (isApiSuccess(res)) {
+        setPoDetail(res.data);
+        setSelectedPo((prev) => prev ?? {
+          id: res.data.id,
+          poNumber: res.data.poNumber,
+          supplierName: res.data.supplierName,
+          statusLabel: res.data.statusLabel,
+        });
+        const lotsRes = await fetchPoStockLots(id);
+        if (isApiSuccess(lotsRes) && Array.isArray(lotsRes.data)) {
+          setLotOptions(lotsRes.data);
+          const pre = urlLotId
+            ? lotsRes.data.find((l) => String(l.id) === urlLotId)
+            : lotsRes.data.find((l) => l.status === "OPEN") || lotsRes.data[0];
+          if (pre) {
+            setSelectedLot(pre);
+            setBatchNumber(pre.lotNumber);
+          } else {
+            setBatchNumber(res.data.poNumber);
+          }
+        } else {
+          setBatchNumber(res.data.poNumber);
+        }
+        setNote(`Nhập Serial từ đơn mua hàng ${res.data.poNumber}`);
+      }
+    } catch {
+      showToast("Không tải được chi tiết PO.", "error");
+    } finally {
+      setPoLoading(false);
+    }
+  }, []);
+
+  const loadPoImeiQueue = useCallback(async () => {
+    try {
+      const res = await fetchPoImeiQueue();
+      if (isApiSuccess(res) && Array.isArray(res.data)) {
+        setPoOptions(res.data);
+        return res.data;
+      }
+    } catch {
+      showToast("Không tải được danh sách PO chờ quét Serial.", "error");
+    }
+    return [];
+  }, []);
+
+  useEffect(() => {
+    loadPoImeiQueue().then((list) => {
+      if (urlPoId) {
+        const match = list.find((p) => String(p.id) === urlPoId);
+        if (match) {
+          setSelectedPo(match);
+          loadPoDetail(match.id);
+        } else {
+          loadPoDetail(Number(urlPoId));
+        }
+      }
+    });
+  }, [urlPoId, loadPoImeiQueue, loadPoDetail]);
+
+  const handleSelectPo = async (po) => {
+    setSelectedPo(po);
+    setSelectedPoItem(null);
+    setSelectedVariant(null);
+    setSelectedLot(null);
+    setLotOptions([]);
+    setSearchInput("");
+    setImeiText("");
+    if (po) {
+      await loadPoDetail(po.id);
+    } else {
+      setPoDetail(null);
+      setBatchNumber("");
+      setNote("");
+    }
+  };
+
+  const handleSelectLot = (lot) => {
+    setSelectedLot(lot);
+    setBatchNumber(lot?.lotNumber || "");
+    setSelectedPoItem(null);
+    setSelectedVariant(null);
+    setImeiText("");
+  };
+
+  const handleSelectPoItem = (item) => {
+    setSelectedPoItem(item);
+    setSelectedVariant({
+      id: item.variantId,
+      skuCode: item.skuCode,
+      productName: item.productName,
+      variantName: item.variantName,
+    });
+    setImeiText("");
+  };
+
+  const poImeiRemaining = selectedPoItem?.quantityImeiRemaining ?? null;
+  const poImeiRequired = selectedPoItem?.quantityImeiRequired ?? 0;
+  const poImeiScanned = selectedPoItem?.quantityImeiScanned ?? 0;
+
+  const poTotalRequired = poDetail?.items?.reduce((s, i) => s + (i.quantityImeiRequired || 0), 0) ?? 0;
+  const poTotalScanned = poDetail?.items?.reduce((s, i) => s + (i.quantityImeiScanned || 0), 0) ?? 0;
+  const poProgressPct = poTotalRequired > 0 ? Math.round((poTotalScanned / poTotalRequired) * 100) : 0;
+
   // ═════════════════════════════════════════════════════════════════════════
-  // AUTOCOMPLETE — API 1: Tìm Variant
+  // AUTOCOMPLETE — API 1: Tìm Variant (Admin — nhập tự do)
   // ═════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     if (debouncedSearch.length < 2) {
@@ -168,39 +298,102 @@ const ImeiManagementPage = () => {
 
   const uniqueImeis = [...new Set(parsedImeis)];
   const hasDuplicates = parsedImeis.length !== uniqueImeis.length;
+  const exceedsPoLimit = poImeiRemaining != null && uniqueImeis.length > poImeiRemaining;
 
   // ═════════════════════════════════════════════════════════════════════════
   // SUBMIT — API 2: Nhập IMEI Thủ Công
   // ═════════════════════════════════════════════════════════════════════════
   const handleManualSubmit = async () => {
+    if (warehousePoRequired && !selectedPo) {
+      showToast("Vui lòng chọn Đơn mua hàng (PO) trước khi quét Serial.", "warning");
+      return;
+    }
+    if (warehousePoRequired && !selectedPoItem) {
+      showToast("Vui lòng chọn dòng sản phẩm trong PO cần quét Serial.", "warning");
+      return;
+    }
+    if (warehousePoRequired && selectedPo && !selectedLot) {
+      showToast("Vui lòng chọn Mã lô hàng (đợt giao) trước khi quét Serial.", "warning");
+      return;
+    }
     if (!selectedVariant) {
       showToast("Vui lòng chọn sản phẩm (Variant) cần nhập!", "warning");
       return;
     }
     if (uniqueImeis.length === 0) {
-      showToast("Vui lòng nhập ít nhất 1 mã IMEI.", "warning");
+      showToast("Vui lòng nhập ít nhất 1 mã Serial.", "warning");
+      return;
+    }
+    if (exceedsPoLimit) {
+      showToast(`Chỉ còn ${poImeiRemaining} mã Serial cần quét cho dòng này.`, "warning");
       return;
     }
 
     setSubmitLoading(true);
     try {
+      const actorUserId = getStoredUserId();
+      if (!actorUserId) {
+        showToast("Không xác định được tài khoản. Vui lòng đăng xuất và đăng nhập lại.", "error");
+        setSubmitLoading(false);
+        return;
+      }
       const payload = {
         variantId: selectedVariant.id,
         imeis: uniqueImeis,
         batchNumber: batchNumber || undefined,
         note: note || undefined,
+        userId: actorUserId,
+        ...(selectedPo && selectedPoItem
+          ? {
+              purchaseOrderId: selectedPo.id,
+              purchaseOrderItemId: selectedPoItem.id,
+              stockLotId: selectedLot?.id,
+            }
+          : {}),
       };
       const res = await importImeis(payload);
       if (res.success) {
+        const savedCount = uniqueImeis.length;
+        const savedItemId = selectedPoItem?.id;
         showToast(
-          res.message || `Nhập thành công ${uniqueImeis.length} mã IMEI vào kho! 🎉`,
+          res.message || `Nhập thành công ${savedCount} mã Serial vào kho! 🎉`,
           "success",
         );
         setImeiText("");
-        setBatchNumber("");
-        setNote("");
+        if (selectedPo) {
+          const detailRes = await fetchPoDetail(selectedPo.id);
+          if (isApiSuccess(detailRes)) {
+            setPoDetail(detailRes.data);
+            const refreshed = detailRes.data.items?.find((i) => i.id === savedItemId);
+            if (refreshed) handleSelectPoItem(refreshed);
+            if (detailRes.data.status === "COMPLETED") {
+              showToast(`PO ${detailRes.data.poNumber} đã hoàn tất quét Serial!`, "success");
+              await loadPoImeiQueue();
+            }
+          } else {
+            // Fallback: cập nhật local khi API refresh thất bại
+            setPoDetail((prev) => {
+              if (!prev?.items) return prev;
+              const items = prev.items.map((i) => {
+                if (i.id !== savedItemId) return i;
+                const scanned = (i.quantityImeiScanned || 0) + savedCount;
+                const required = i.quantityImeiRequired || 0;
+                return {
+                  ...i,
+                  quantityImeiScanned: scanned,
+                  quantityImeiRemaining: Math.max(0, required - scanned),
+                };
+              });
+              const allDone = items.every((i) => (i.quantityImeiRemaining ?? 0) === 0);
+              return { ...prev, items, status: allDone ? "COMPLETED" : prev.status };
+            });
+          }
+        } else {
+          setBatchNumber("");
+          setNote("");
+        }
       } else {
-        showToast(res.message || "Có lỗi xảy ra khi nhập IMEI.", "error");
+        showToast(res.message || "Có lỗi xảy ra khi nhập Serial.", "error");
       }
     } catch (err) {
       handleApiError(err);
@@ -217,14 +410,67 @@ const ImeiManagementPage = () => {
       showToast("Vui lòng chọn file Excel (.xlsx) để upload.", "warning");
       return;
     }
+    if (warehousePoRequired && !selectedPo) {
+      showToast("Vui lòng chọn Đơn mua hàng (PO) ở tab Nhập thủ công trước khi import Excel.", "warning");
+      return;
+    }
+    if (warehousePoRequired && !selectedPoItem) {
+      showToast("Vui lòng chọn dòng sản phẩm trong PO (tab Nhập thủ công).", "warning");
+      return;
+    }
+    if (warehousePoRequired && selectedPo && !selectedLot) {
+      showToast("Vui lòng chọn Mã lô hàng (tab Nhập thủ công).", "warning");
+      return;
+    }
+    if (!selectedVariant && !selectedPoItem) {
+      showToast("Chọn PO + dòng sản phẩm ở tab Nhập thủ công, hoặc chọn Variant (Admin).", "warning");
+      return;
+    }
 
     setUploadLoading(true);
     try {
-      const res = await uploadImeiExcel(excelFile);
+      const codes = await parseSerialsFromExcelFile(excelFile);
+      if (!codes.length) {
+        showToast("Không tìm thấy mã Serial/IMEI hợp lệ trong file Excel.", "warning");
+        return;
+      }
+      const uniqueCodes = [...new Set(codes)];
+      const remaining = poImeiRemaining;
+      if (remaining != null && uniqueCodes.length > remaining) {
+        showToast(`File có ${uniqueCodes.length} mã nhưng PO chỉ cần thêm ${remaining} Serial.`, "warning");
+        return;
+      }
+
+      const actorUserId = getStoredUserId();
+      if (!actorUserId) {
+        showToast("Không xác định được tài khoản. Vui lòng đăng xuất và đăng nhập lại.", "error");
+        return;
+      }
+
+      const variantId = selectedVariant?.id ?? selectedPoItem?.variantId;
+      const payload = {
+        variantId,
+        imeis: uniqueCodes,
+        batchNumber: batchNumber || undefined,
+        note: note || `Import Excel ${excelFile.name}`,
+        userId: actorUserId,
+        ...(selectedPo && selectedPoItem
+          ? {
+              purchaseOrderId: selectedPo.id,
+              purchaseOrderItemId: selectedPoItem.id,
+              stockLotId: selectedLot?.id,
+            }
+          : {}),
+      };
+      const res = await importImeis(payload);
       if (res.success) {
-        showToast(res.message || "Import IMEI từ file Excel thành công! 🎉", "success");
+        showToast(res.message || `Import thành công ${uniqueCodes.length} mã Serial từ Excel!`, "success");
         setExcelFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
+        if (selectedPo) {
+          await loadPoDetail(selectedPo.id);
+          await loadPoImeiQueue();
+        }
       } else {
         showToast(res.message || "Lỗi khi import file Excel.", "error");
       }
@@ -324,12 +570,12 @@ const ImeiManagementPage = () => {
   // ═════════════════════════════════════════════════════════════════════════
   const downloadTemplate = () => {
     // Create a simple CSV template (since we don't have a xlsx lib on FE)
-    const csvContent = "SKU,IMEI\nIP16-PRO-256-DEN,351234567890001\nIP16-PRO-256-DEN,351234567890002\nSS-S24-ULTRA-512,351234567890003\n";
+    const csvContent = "SKU,Serial\nIP16-PRO-256-DEN,SN-F2LDN3K4N741\nIP16-PRO-256-DEN,SN-H8K9M2P5Q123\nSS-S24-ULTRA-512,SN-J3L6N9R2T456\n";
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "imei_template.csv";
+    link.download = "serial_template.csv";
     link.click();
     URL.revokeObjectURL(url);
     showToast("Đã tải file mẫu! Lưu ý: khi upload phải convert sang .xlsx", "info");
@@ -339,7 +585,7 @@ const ImeiManagementPage = () => {
   // RENDER
   // ═════════════════════════════════════════════════════════════════════════
   return (
-    <AdminLayout currentPage="Nhập IMEI">
+    <AdminLayout currentPage="Nhập Serial">
       <Box sx={{ p: { xs: 2, md: 3 } }}>
         {/* ── HEADER ── */}
         <Box sx={{ mb: 3 }}>
@@ -357,13 +603,18 @@ const ImeiManagementPage = () => {
             </Box>
             <Box>
               <Typography variant="h4" fontWeight="bold" sx={{ lineHeight: 1.2 }}>
-                Quản Lý Kho & IMEI
+                Quản Lý Kho & Serial
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Nhập IMEI thủ công, upload Excel, hoặc xem báo cáo tồn kho
+                Quét Serial theo Đơn mua hàng (PO) — đối chiếu số lượng đã nhập kho
               </Typography>
             </Box>
           </Box>
+          {warehousePoRequired && (
+            <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
+              Nhân viên Kho <strong>bắt buộc</strong> chọn PO đã nhập kho trước khi quét Serial. Không nhập kho tự do.
+            </Alert>
+          )}
         </Box>
 
         {/* ── TABS ── */}
@@ -417,143 +668,151 @@ const ImeiManagementPage = () => {
                   gutterBottom
                   sx={{ display: "flex", alignItems: "center", gap: 1 }}
                 >
-                  <InventoryIcon sx={{ color: ACCENT }} /> Thông Tin Nhập Kho
+                  <InventoryIcon sx={{ color: ACCENT }} /> Nhập Serial theo PO
                 </Typography>
                 <Divider sx={{ mb: 3 }} />
 
-                {/* ── Autocomplete Search ── */}
-                <Typography
-                  variant="subtitle2"
-                  gutterBottom
-                  sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                >
-                  <SearchIcon fontSize="small" sx={{ color: ACCENT }} />
-                  Bước 1: Tìm sản phẩm
+                {/* ── Bước 1: Chọn PO ── */}
+                <Typography variant="subtitle2" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <PoIcon fontSize="small" sx={{ color: ACCENT }} />
+                  Bước 1: Chọn Đơn mua hàng (PO)
                 </Typography>
                 <Autocomplete
-                  id="variant-autocomplete"
-                  options={variantOptions}
-                  getOptionLabel={(option) =>
-                    `${option.productName} — ${option.variantName} (${option.skuCode})`
-                  }
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  value={selectedVariant}
-                  onChange={(_, newValue) => setSelectedVariant(newValue)}
-                  inputValue={searchInput}
-                  onInputChange={(_, newInput) => setSearchInput(newInput)}
-                  loading={searchLoading}
-                  noOptionsText={
-                    searchInput.length < 2
-                      ? "Gõ ít nhất 2 ký tự để tìm kiếm..."
-                      : "Không tìm thấy sản phẩm phù hợp"
-                  }
-                  renderOption={(props, option) => {
-                    const { key, ...restProps } = props;
-                    return (
-                      <Box
-                        component="li"
-                        key={key}
-                        {...restProps}
-                        sx={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-start !important",
-                          py: 1.5,
-                          px: 2,
-                          borderBottom: "1px solid #f5f5f5",
-                          "&:hover": { bgcolor: "#fff8ef !important" },
-                        }}
-                      >
-                        <Typography variant="body2" fontWeight={600}>
-                          {option.productName} — {option.variantName}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          sx={{ fontFamily: "monospace", color: "text.secondary" }}
-                        >
-                          SKU: {option.skuCode} | ID: {option.id}
-                        </Typography>
-                      </Box>
-                    );
-                  }}
+                  options={poOptions}
+                  getOptionLabel={(o) => `${o.poNumber} — ${o.supplierName} (${o.statusLabel})`}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  value={selectedPo}
+                  onChange={(_, v) => handleSelectPo(v)}
+                  loading={poLoading}
+                  noOptionsText="Không có PO chờ quét Serial. Hoàn thành kiểm đếm PO trước."
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      placeholder="Gõ tên sản phẩm, variant, hoặc mã SKU..."
-                      variant="outlined"
+                      placeholder="Chọn PO đã nhập kho, chờ quét Serial..."
                       size="small"
-                      slotProps={{
-                        input: {
-                          ...params.InputProps,
-                          endAdornment: (
-                            <>
-                              {searchLoading ? <CircularProgress size={18} /> : null}
-                              {params.InputProps.endAdornment}
-                            </>
-                          ),
-                        },
-                      }}
-                      sx={{
-                        "& .MuiOutlinedInput-root": { borderRadius: 2 },
-                      }}
+                      sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 }, mb: 2 }}
                     />
                   )}
-                  sx={{ mb: 2 }}
                 />
 
-                {/* ── Selected Variant Info ── */}
-                {selectedVariant && (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1.5,
-                      p: 1.5,
-                      mb: 2.5,
-                      borderRadius: 2,
-                      bgcolor: "#f0fdf4",
-                      border: "1px solid #bbf7d0",
-                    }}
-                  >
-                    <CheckIcon sx={{ color: "#16a34a", fontSize: 20 }} />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" fontWeight={600} color="#166534">
-                        {selectedVariant.productName} — {selectedVariant.variantName}
-                      </Typography>
-                      <Typography variant="caption" sx={{ fontFamily: "monospace", color: "#15803d" }}>
-                        SKU: {selectedVariant.skuCode} | Variant ID: {selectedVariant.id}
-                      </Typography>
+                {poLoading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+
+                {lotOptions.length > 0 && (
+                  <>
+                    <Typography variant="subtitle2" gutterBottom sx={{ mt: 1 }}>
+                      Bước 1b: Chọn Mã lô hàng (đợt giao)
+                    </Typography>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
+                      {lotOptions.map((lot) => (
+                        <Chip
+                          key={lot.id}
+                          label={`${lot.lotNumber} · ${lot.itemsScanned}/${lot.itemsRequired} · ${lot.status}`}
+                          clickable
+                          color={selectedLot?.id === lot.id ? "warning" : "default"}
+                          variant={selectedLot?.id === lot.id ? "filled" : "outlined"}
+                          onClick={() => handleSelectLot(lot)}
+                        />
+                      ))}
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setSelectedVariant(null);
-                        setSearchInput("");
-                      }}
-                    >
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
+                  </>
                 )}
 
-                {/* ── Batch Number & Note ── */}
+                {/* ── Bước 2: Chọn dòng SP trong PO ── */}
+                {poDetail?.items?.length > 0 && (
+                  <>
+                    <Typography variant="subtitle2" gutterBottom sx={{ mt: 1 }}>
+                      Bước 2: Chọn sản phẩm cần quét Serial
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, borderRadius: 2 }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: "#fafafa" }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>Sản phẩm</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 700 }}>Cần quét</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 700 }}>Đã quét</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 700 }}>Còn lại</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {poDetail.items.map((item) => {
+                            const done = (item.quantityImeiRemaining ?? 0) === 0;
+                            const active = selectedPoItem?.id === item.id;
+                            return (
+                              <TableRow
+                                key={item.id}
+                                hover
+                                selected={active}
+                                onClick={() => !done && handleSelectPoItem(item)}
+                                sx={{
+                                  cursor: done ? "default" : "pointer",
+                                  opacity: done ? 0.55 : 1,
+                                  bgcolor: active ? "#fff8ef" : done ? "#f0fdf4" : "inherit",
+                                }}
+                              >
+                                <TableCell>
+                                  <Typography variant="body2" fontWeight={600}>{item.productName}</Typography>
+                                  <Typography variant="caption" color="text.secondary">{item.variantName} · {item.skuCode}</Typography>
+                                </TableCell>
+                                <TableCell align="center">{item.quantityImeiRequired}</TableCell>
+                                <TableCell align="center">
+                                  <Chip label={item.quantityImeiScanned} size="small" color={done ? "success" : "default"} />
+                                </TableCell>
+                                <TableCell align="center">
+                                  {done ? <CheckIcon color="success" fontSize="small" /> : item.quantityImeiRemaining}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )}
+
+                {selectedPoItem && (
+                  <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                    Đang quét: <strong>{selectedPoItem.productName}</strong> — cần thêm{" "}
+                    <strong>{poImeiRemaining}</strong> mã Serial (đã quét {poImeiScanned}/{poImeiRequired})
+                  </Alert>
+                )}
+
+                {/* Admin: tìm sản phẩm tự do (không qua PO) */}
+                {!warehousePoRequired && !selectedPo && (
+                  <>
+                    <Typography variant="subtitle2" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 1 }}>
+                      <SearchIcon fontSize="small" sx={{ color: ACCENT }} />
+                      Hoặc tìm sản phẩm thủ công (Admin)
+                    </Typography>
+                    <Autocomplete
+                      options={variantOptions}
+                      getOptionLabel={(o) => `${o.productName} — ${o.variantName} (${o.skuCode})`}
+                      isOptionEqualToValue={(a, b) => a.id === b.id}
+                      value={selectedVariant}
+                      onChange={(_, v) => { setSelectedVariant(v); setSelectedPoItem(null); }}
+                      inputValue={searchInput}
+                      onInputChange={(_, v) => setSearchInput(v)}
+                      loading={searchLoading}
+                      noOptionsText={searchInput.length < 2 ? "Gõ ít nhất 2 ký tự..." : "Không tìm thấy"}
+                      renderInput={(params) => (
+                        <TextField {...params} placeholder="Tên SP, SKU..." size="small" sx={{ mb: 2, "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
+                      )}
+                    />
+                  </>
+                )}
+
+                {/* ── Batch & Note (tự điền từ PO) ── */}
                 <Box sx={{ display: "flex", gap: 2, mb: 2.5 }}>
                   <TextField
-                    id="batch-number"
                     label="Mã lô hàng"
-                    placeholder="VD: BATCH-2025-001"
-                    variant="outlined"
                     size="small"
                     fullWidth
                     value={batchNumber}
+                    disabled={!!selectedLot}
                     onChange={(e) => setBatchNumber(e.target.value)}
                     sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
                   />
                   <TextField
-                    id="note"
                     label="Ghi chú"
-                    placeholder="VD: Nhập từ NCC FPT"
-                    variant="outlined"
                     size="small"
                     fullWidth
                     value={note}
@@ -563,13 +822,9 @@ const ImeiManagementPage = () => {
                 </Box>
 
                 {/* ── IMEI Textarea ── */}
-                <Typography
-                  variant="subtitle2"
-                  gutterBottom
-                  sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                >
+                <Typography variant="subtitle2" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <PasteIcon fontSize="small" sx={{ color: ACCENT }} />
-                  Bước 2: Nhập / Quét IMEI (mỗi dòng 1 mã)
+                  Bước 3: Nhập / Quét Serial (mỗi dòng 1 mã)
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
                   💡 Hỗ trợ nhập tay, paste, hoặc quét bằng súng barcode (tự động xuống dòng)
@@ -581,7 +836,7 @@ const ImeiManagementPage = () => {
                   fullWidth
                   value={imeiText}
                   onChange={(e) => setImeiText(e.target.value)}
-                  placeholder={`351234567890111\n351234567890222\n351234567890333`}
+                  placeholder={`SN-F2LDN3K4N741\nSN-H8K9M2P5Q123\nSN-J3L6N9R2T456`}
                   variant="outlined"
                   sx={{
                     mb: 2,
@@ -593,6 +848,12 @@ const ImeiManagementPage = () => {
                     },
                   }}
                 />
+
+                {exceedsPoLimit && (
+                  <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+                    Vượt quá số lượng cần quét! Chỉ còn <strong>{poImeiRemaining}</strong> mã cho dòng này.
+                  </Alert>
+                )}
 
                 {/* ── Action Buttons ── */}
                 <Box sx={{ display: "flex", gap: 1.5, justifyContent: "space-between", alignItems: "center" }}>
@@ -612,13 +873,21 @@ const ImeiManagementPage = () => {
                     variant="contained"
                     size="large"
                     onClick={handleManualSubmit}
-                    disabled={submitLoading || parsedImeis.length === 0 || !selectedVariant}
+                    disabled={
+                      submitLoading ||
+                      parsedImeis.length === 0 ||
+                      !selectedVariant ||
+                      exceedsPoLimit ||
+                      (warehousePoRequired && (!selectedPo || !selectedPoItem))
+                    }
                     startIcon={submitLoading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
                     sx={{ ...btnPrimary, px: 4, py: 1.2, fontSize: "0.95rem" }}
                   >
                     {submitLoading
                       ? "Đang xử lý..."
-                      : `📥 Nhập Kho (${uniqueImeis.length} mã)`}
+                      : poImeiRemaining != null
+                        ? `📥 Nhập (${uniqueImeis.length}/${poImeiRemaining} còn lại)`
+                        : `📥 Nhập Kho (${uniqueImeis.length} mã)`}
                   </Button>
                 </Box>
               </CardContent>
@@ -633,9 +902,42 @@ const ImeiManagementPage = () => {
                   gutterBottom
                   sx={{ display: "flex", alignItems: "center", gap: 1 }}
                 >
-                  <QrIcon sx={{ color: ACCENT }} /> Xem Trước
+                  <QrIcon sx={{ color: ACCENT }} /> Tiến độ & Xem trước
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
+
+                {poDetail && (
+                  <Box sx={{ mb: 2.5, p: 2, borderRadius: 2, bgcolor: "#fff8ef", border: "1px solid #ffd8a8" }}>
+                    <Typography variant="subtitle2" fontWeight={800} color="#e65100">
+                      {poDetail.poNumber} — {poDetail.supplierName}
+                    </Typography>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1, mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Tiến độ quét Serial toàn PO
+                      </Typography>
+                      <Typography variant="caption" fontWeight={700}>
+                        {poTotalScanned}/{poTotalRequired} ({poProgressPct}%)
+                      </Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={poProgressPct}
+                      sx={{ height: 8, borderRadius: 4, bgcolor: "#ffe0b2", "& .MuiLinearProgress-bar": { bgcolor: ACCENT } }}
+                    />
+                    {selectedPoItem && (
+                      <Box sx={{ mt: 1.5 }}>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          Dòng đang quét: {selectedPoItem.productName}
+                        </Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={poImeiRequired > 0 ? Math.min(100, (poImeiScanned / poImeiRequired) * 100) : 0}
+                          sx={{ mt: 0.5, height: 6, borderRadius: 3, bgcolor: "#e8f5e9", "& .MuiLinearProgress-bar": { bgcolor: "#16a34a" } }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                )}
 
                 {/* ── Statistics Chips ── */}
                 {parsedImeis.length > 0 && (
@@ -666,7 +968,7 @@ const ImeiManagementPage = () => {
 
                 {hasDuplicates && (
                   <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                    Có IMEI trùng lặp! Hệ thống sẽ tự động loại bỏ trùng và chỉ gửi{" "}
+                    Có Serial trùng lặp! Hệ thống sẽ tự động loại bỏ trùng và chỉ gửi{" "}
                     <strong>{uniqueImeis.length}</strong> mã duy nhất.
                   </Alert>
                 )}
@@ -685,7 +987,7 @@ const ImeiManagementPage = () => {
                     <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
                       <QrIcon sx={{ fontSize: 56, mb: 1, opacity: 0.15 }} />
                       <Typography variant="body2">
-                        Nhập hoặc quét mã IMEI ở bên trái để xem trước
+                        Nhập hoặc quét mã Serial ở bên trái để xem trước
                       </Typography>
                     </Box>
                   ) : (
@@ -769,8 +1071,9 @@ const ImeiManagementPage = () => {
                   <ExcelIcon sx={{ color: "#16a34a" }} /> Upload File Excel Nhập IMEI Hàng Loạt
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Upload file <code>.xlsx</code> chứa 2 cột: <strong>SKU</strong> (cột A) và{" "}
-                  <strong>IMEI</strong> (cột B). Dòng 1 là Header sẽ tự động bỏ qua.
+                  Upload file <code>.xlsx</code> — cột <strong>Serial</strong> (hoặc SKU + Serial).
+                  Chọn PO + dòng SP + mã lô ở tab <strong>Nhập thủ công</strong> trước khi import.
+                  File mẫu: <code>test-data/PO-3542D9D5-Dong-ho-25-serial.xlsx</code>
                 </Typography>
 
                 {/* ── Drag & Drop Zone ── */}
@@ -835,7 +1138,7 @@ const ImeiManagementPage = () => {
                     <thead>
                       <tr>
                         <th>Cột A (SKU)</th>
-                        <th>Cột B (IMEI)</th>
+                        <th>Cột B (Serial)</th>
                       </tr>
                     </thead>
                     <tbody>

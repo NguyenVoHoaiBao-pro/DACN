@@ -3,14 +3,16 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Ho_Chi_Minh
-  # Aiven MySQL (goi nho ~20 connection): 5 service x 3 pool = 15 (du cho dev)
+  # Local Docker MySQL (dev) — pool lon hon cloud vi khong bi gioi han connection
   datasource:
     hikari:
-      maximum-pool-size: 3
-      minimum-idle: 1
+      maximum-pool-size: 50
+      minimum-idle: 10
       connection-timeout: 20000
       max-lifetime: 280000
       idle-timeout: 120000
+      leak-detection-threshold: 60000
+      connection-test-query: SELECT 1
   cloud:
     openfeign:
       micrometer:
@@ -70,6 +72,7 @@ payment:
   frontend-success-url: ${PAYMENT_FRONTEND_SUCCESS_URL:http://localhost:5173/payment/success}
   frontend-fail-url: ${PAYMENT_FRONTEND_FAIL_URL:http://localhost:5173/payment/fail}
   backend-base-url: ${PAYMENT_BACKEND_BASE_URL:http://localhost:8080}
+  refund-simulate-on-error: ${PAYMENT_REFUND_SIMULATE:false}
 
   vnpay:
     tmn-code: ${VNPAY_TMN_CODE:1T0D4TUS}
@@ -77,6 +80,7 @@ payment:
     pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
     api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
     return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/payment/vnpay/return}
+    trust-all-ssl: ${PAYMENT_VNPAY_TRUST_ALL_SSL:false}
     version: "2.1.0"
     command: pay
     order-type: other
@@ -88,6 +92,7 @@ payment:
     access-key: ${MOMO_ACCESS_KEY:YOUR_ACCESS_KEY}
     secret-key: ${MOMO_SECRET_KEY:YOUR_SECRET_KEY}
     api-url: ${MOMO_API_URL:https://test-payment.momo.vn/v2/gateway/api/create}
+    refund-url: ${MOMO_REFUND_URL:https://test-payment.momo.vn/v2/gateway/api/refund}
     return-url: ${MOMO_RETURN_URL:http://localhost:8080/api/payment/momo/return}
     ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payment/momo/ipn}
     request-type: payWithMethod

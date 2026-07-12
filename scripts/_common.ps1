@@ -203,7 +203,7 @@ function Get-ElectroServices {
         @{ Name = 'cart-service';     Port = 8084; Phase = 3; Description = 'Cart' }
         @{ Name = 'order-service';    Port = 8086; Phase = 3; Description = 'Order + Warranty' }
         @{ Name = 'review-service';   Port = 8087; Phase = 3; Description = 'Reviews' }
-        @{ Name = 'statistics-service'; Port = 8088; Phase = 3; Description = 'Statistics + Redis' }
+        @{ Name = 'statistics-service'; Port = 8088; Phase = 3; Description = 'Statistics + Redis'; WaitAfterSec = 25 }
         @{ Name = 'reco-service';       Port = 5003; Phase = 3; Description = 'AI Recommendations (SVD+KNN)'; Runtime = 'python' }
         @{ Name = 'chatbot-service';  Port = 8092; Phase = 3; Description = 'Chatbot RAG + Pinecone' }
         @{ Name = 'api-gateway';      Port = 8080; Phase = 4; Description = 'API Gateway'; WaitAfterSec = 12 }

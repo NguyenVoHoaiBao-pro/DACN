@@ -24,6 +24,8 @@ public interface CatalogClient {
     class ProductResponse {
         private Integer id;
         private String name;
+        private Integer productTypeId;
+        private String productTypeName;
     }
 
     @Data

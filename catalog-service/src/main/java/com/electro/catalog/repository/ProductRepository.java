@@ -9,7 +9,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Integer>, JpaSpecificationExecutor<Product> {
@@ -20,14 +22,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
     @Query("SELECT p FROM Product p WHERE p.isActive = true")
     List<Product> findByIsActiveTrue();
 
-    @Query("SELECT p FROM Product p "
-            + "JOIN FETCH p.productType "
-            + "JOIN FETCH p.producer "
-            + "WHERE p.isActive = true")
-    List<Product> findActiveWithTypeAndProducer();
-
     @Query(value = "SELECT p FROM Product p " +
-            "LEFT JOIN FETCH p.images " +
             "JOIN FETCH p.productType " +
             "JOIN FETCH p.producer " +
             "WHERE p.isActive = true",
@@ -56,7 +51,11 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
     @Query("SELECT p FROM Product p WHERE p.productType.id = :productTypeId AND p.isActive = true")
     List<Product> findByProductTypeIdAndIsActiveTrue(@Param("productTypeId") Integer productTypeId);
     
-    @Query("SELECT p FROM Product p WHERE p.productType.id = :productTypeId AND p.isActive = true")
+    @Query(value = "SELECT p FROM Product p " +
+            "JOIN FETCH p.productType " +
+            "JOIN FETCH p.producer " +
+            "WHERE p.productType.id = :productTypeId AND p.isActive = true",
+            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.productType.id = :productTypeId AND p.isActive = true")
     Page<Product> findByProductTypeIdAndIsActiveTrue(@Param("productTypeId") Integer productTypeId, Pageable pageable);
     
     @Query("SELECT p FROM Product p WHERE p.producer.id = :producerId AND p.isActive = true")
@@ -73,22 +72,17 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
     
     // Featured products: products manually items marked isFeatured = true
     @Query(value = "SELECT p FROM Product p " +
-            "LEFT JOIN FETCH p.images " +
             "JOIN FETCH p.productType " +
             "JOIN FETCH p.producer " +
             "WHERE p.isActive = true AND p.isFeatured = true",
             countQuery = "SELECT COUNT(p) FROM Product p WHERE p.isActive = true AND p.isFeatured = true")
     Page<Product> findFeaturedProductsPage(Pageable pageable);
 
-    // Best sellers: newest active products (sold count lives in order-service)
-    @Query(value = "SELECT p FROM Product p " +
-            "LEFT JOIN FETCH p.images " +
+    @Query("SELECT DISTINCT p FROM Product p " +
             "JOIN FETCH p.productType " +
             "JOIN FETCH p.producer " +
-            "WHERE p.isActive = true " +
-            "ORDER BY p.createdAt DESC",
-            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.isActive = true")
-    Page<Product> findBestSellingProductsPage(Pageable pageable);
+            "WHERE p.id IN :ids AND p.isActive = true")
+    List<Product> findActiveProductsByIds(@Param("ids") Collection<Integer> ids);
 
     // ══════════ Admin queries ══════════
 
@@ -129,4 +123,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer>, JpaS
 
     /** Đếm sản phẩm theo trạng thái */
     long countByIsActive(Boolean isActive);
+
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.productType WHERE p.id = :id")
+    Optional<Product> findByIdWithProductType(@Param("id") Integer id);
 }

@@ -28,13 +28,13 @@ const ForgotPassword = () => {
       const response = await httpClient.post(`${API_PREFIX}/auth/forgot-password`, { email });
 
       if (response.data.success) {
-        toast.success(response.data.message || "Email khôi phục mật khẩu đã được gửi!");
+        toast.success(response.data.message || "Nếu email tồn tại, chúng tôi đã gửi liên kết đặt lại mật khẩu. Kiểm tra hộp thư (cả Spam).");
       } else {
-        toast.error(response.data.message || "Đã có lỗi xảy ra");
+        toast.error(response.data.message || "Không thể gửi yêu cầu. Vui lòng thử lại.");
       }
     } catch (error) {
       if (error.response) {
-        toast.error(error.response.data.message || "Email không tồn tại trên hệ thống!");
+        toast.error(error.response.data?.message || "Không thể gửi yêu cầu. Vui lòng thử lại.");
       } else {
         toast.error("Lỗi kết nối máy chủ. Vui lòng thử lại.");
       }

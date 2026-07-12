@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,4 +28,21 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransaction> findFirstByOrderCodeAndStatusOrderByCreatedAtDesc(String orderCode, PaymentTransaction.TransactionStatus status);
 
     Page<PaymentTransaction> findAll(Pageable pageable);
+
+    @Query("""
+            SELECT pt FROM PaymentTransaction pt
+            WHERE pt.createdAt BETWEEN :start AND :end
+            ORDER BY pt.createdAt DESC""")
+    Page<PaymentTransaction> findByCreatedAtBetween(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            Pageable pageable);
+
+    @Query("""
+            SELECT COALESCE(SUM(pt.amount), 0) FROM PaymentTransaction pt
+            WHERE pt.status = :status AND pt.createdAt BETWEEN :start AND :end""")
+    BigDecimal sumAmountByStatusAndDateRange(
+            @Param("status") PaymentTransaction.TransactionStatus status,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
 }

@@ -128,10 +128,10 @@ const WarrantyTicketDetailModal = ({ open, ticketId, onClose, onSuccess }) => {
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { borderRadius: 3, height: '90vh' } }}>
-            <DialogTitle sx={{ m: 0, p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#f8f9fa", borderBottom: '1px solid #e0e0e0' }}>
+            <DialogTitle component="div" sx={{ m: 0, p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#f8f9fa", borderBottom: '1px solid #e0e0e0' }}>
                 <Box display="flex" alignItems="center" gap={1.5}>
                     <UpdateIcon color="primary" sx={{ fontSize: 28 }} />
-                    <Typography variant="h6" fontWeight="bold">Chi tiết phiếu bảo hành: {ticket?.ticketCode || "..."}</Typography>
+                    <Typography variant="h6" component="span" fontWeight="bold">Chi tiết phiếu bảo hành: {ticket?.ticketCode || "..."}</Typography>
                     {ticket && (
                         <Chip 
                             label={ticket.statusDisplay} 

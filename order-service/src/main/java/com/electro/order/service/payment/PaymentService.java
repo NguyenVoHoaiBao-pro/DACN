@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -287,6 +288,96 @@ public class PaymentService {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 4. HOÀN TIỀN QUA GATEWAY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Gọi API hoàn tiền cổng thanh toán cho đơn đã PAID.
+     */
+    public PaymentDto.GatewayRefundResult executeGatewayRefund(
+            Order order, BigDecimal amount, String reason) {
+        if (order.getPaymentStatus() != Order.PaymentStatus.PAID) {
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Đơn hàng chưa thanh toán — không thể hoàn qua cổng")
+                    .build();
+        }
+
+        PaymentTransaction originalTxn = transactionRepository
+                .findFirstByOrderCodeAndStatusOrderByCreatedAtDesc(
+                        order.getOrderCode(), PaymentTransaction.TransactionStatus.SUCCESS)
+                .or(() -> transactionRepository.findFirstByOrderCodeAndStatusOrderByCreatedAtDesc(
+                        order.getOrderCode(), PaymentTransaction.TransactionStatus.REFUNDED))
+                .orElse(null);
+
+        if (originalTxn == null) {
+            return PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Không tìm thấy giao dịch thanh toán thành công")
+                    .build();
+        }
+
+        PaymentDto.GatewayRefundResult result = switch (order.getPaymentMethod()) {
+            case VNPAY -> vnPayService.refund(originalTxn, amount, reason);
+            case MOMO -> momoService.refund(originalTxn, amount, reason);
+            case ZALOPAY -> zaloPayService.refund(originalTxn, amount, reason);
+            default -> PaymentDto.GatewayRefundResult.builder()
+                    .success(false)
+                    .message("Phương thức " + order.getPaymentMethod() + " không hỗ trợ hoàn tự động")
+                    .build();
+        };
+
+        if (!result.isSuccess() && paymentConfig.isRefundSimulateOnError()) {
+            log.warn("Gateway refund failed, simulating success for demo. Order: {}, reason: {}",
+                    order.getOrderCode(), result.getMessage());
+            result = PaymentDto.GatewayRefundResult.builder()
+                    .success(true)
+                    .gatewayRefundId("SIM_" + System.currentTimeMillis())
+                    .responseCode("SIMULATED")
+                    .message("Mô phỏng hoàn tiền thành công (sandbox/demo)")
+                    .rawResponse(result.getRawResponse())
+                    .build();
+        }
+
+        if (result.isSuccess()) {
+            originalTxn.setStatus(PaymentTransaction.TransactionStatus.REFUNDED);
+            originalTxn.setRefundedAt(LocalDateTime.now());
+            originalTxn.setRefundAmount(amount);
+            originalTxn.setRefundReason(reason);
+            originalTxn.setResponseMessage(result.getMessage());
+            transactionRepository.save(originalTxn);
+        }
+
+        return result;
+    }
+
+    /**
+     * Kiểm tra số dư ví merchant trên cổng (stub/demo).
+     */
+    public PaymentDto.GatewayBalanceResult checkMerchantBalance(
+            Order.PaymentMethod method, BigDecimal requiredAmount) {
+        BigDecimal simulatedBalance = switch (method) {
+            case VNPAY -> new BigDecimal("50000000");
+            case MOMO -> new BigDecimal("30000000");
+            case ZALOPAY -> new BigDecimal("20000000");
+            default -> BigDecimal.ZERO;
+        };
+        boolean sufficient = simulatedBalance.compareTo(requiredAmount) >= 0;
+        String message = sufficient
+                ? "Số dư ví đủ để hoàn " + requiredAmount.toPlainString() + " VND (kiểm tra demo)."
+                : "Số dư ví không đủ. Cần " + requiredAmount.toPlainString()
+                        + " VND, hiện có ~" + simulatedBalance.toPlainString() + " VND.";
+        return PaymentDto.GatewayBalanceResult.builder()
+                .paymentMethod(method.name())
+                .merchantBalance(simulatedBalance)
+                .requiredAmount(requiredAmount)
+                .sufficient(sufficient)
+                .message(message)
+                .checkedAt(LocalDateTime.now())
+                .build();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -336,6 +427,7 @@ public class PaymentService {
             order.setPaymentStatus(Order.PaymentStatus.PAID);
             order.setPaidAt(LocalDateTime.now());
             order.setTransactionRef(result.getTransactionRef());
+            autoConfirmOrderAfterOnlinePayment(order);
             log.info("Order {} payment SUCCESS, gateway txnId: {}", order.getOrderCode(), result.getGatewayTransactionId());
         } else {
             order.setPaymentStatus(Order.PaymentStatus.FAILED);
@@ -397,5 +489,29 @@ public class PaymentService {
             case FAILED -> "Thanh toán thất bại";
             case REFUNDED -> "Đã hoàn tiền";
         };
+    }
+
+    /**
+     * Luồng 1: Thanh toán online thành công → tự CONFIRMED (COD giữ PENDING chờ Sales duyệt).
+     */
+    private void autoConfirmOrderAfterOnlinePayment(Order order) {
+        if (order.getStatus() != Order.OrderStatus.PENDING) {
+            return;
+        }
+        if (!isOnlineGatewayPayment(order.getPaymentMethod())) {
+            return;
+        }
+        order.setStatus(Order.OrderStatus.CONFIRMED);
+        order.setConfirmedAt(LocalDateTime.now());
+        String note = "[Tự động] Đã xác nhận sau thanh toán online (" + order.getPaymentMethod() + ")";
+        String existing = order.getAdminNote();
+        order.setAdminNote(existing == null || existing.isBlank() ? note : existing + "\n" + note);
+        log.info("Auto-confirmed order {} after {} payment", order.getOrderCode(), order.getPaymentMethod());
+    }
+
+    private static boolean isOnlineGatewayPayment(Order.PaymentMethod method) {
+        return method == Order.PaymentMethod.VNPAY
+                || method == Order.PaymentMethod.MOMO
+                || method == Order.PaymentMethod.ZALOPAY;
     }
 }

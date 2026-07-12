@@ -95,7 +95,7 @@ const WarrantyManagementPage = () => {
         {/* ═══ PAGE HEADER ═══ */}
         <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
           <Box>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>🛡️ Quản Lý Bảo Hành & RMA</Typography>
+            <Typography variant="h4" fontWeight="bold" gutterBottom>🛡️ Quản Lý Bảo Hành</Typography>
             <Typography variant="body1" color="text.secondary">Quản lý phiếu tiếp nhận, sửa chữa và trả bảo hành</Typography>
           </Box>
           <Button

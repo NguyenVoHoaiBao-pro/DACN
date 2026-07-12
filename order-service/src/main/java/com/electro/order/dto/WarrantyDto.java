@@ -150,6 +150,9 @@ public class WarrantyDto {
         private Boolean isUnderWarranty;
         private String returnCarrier;
         private String returnTrackingCode;
+        private String ghnReturnShippingStatus;
+        private String ghnReturnShippingStatusDisplay;
+        private LocalDateTime ghnReturnStatusUpdatedAt;
         /** Hướng dẫn gửi/trả máy sau khi duyệt thu hồi */
         private String returnInstruction;
     }
@@ -198,6 +201,9 @@ public class WarrantyDto {
         private String replacementOrderCode;
         private String returnCarrier;
         private String returnTrackingCode;
+        private String ghnReturnShippingStatus;
+        private String ghnReturnShippingStatusDisplay;
+        private LocalDateTime ghnReturnStatusUpdatedAt;
         private String returnInstruction;
     }
 
@@ -250,6 +256,9 @@ public class WarrantyDto {
         private String systemImeiGrouped;
         private String returnCarrier;
         private String returnTrackingCode;
+        private String ghnReturnShippingStatus;
+        private String ghnReturnShippingStatusDisplay;
+        private LocalDateTime ghnReturnStatusUpdatedAt;
         private String contactName;
         private String status;
         private String statusDisplay;

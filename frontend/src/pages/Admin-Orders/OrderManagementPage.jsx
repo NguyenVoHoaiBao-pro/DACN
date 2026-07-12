@@ -53,6 +53,7 @@ import {
 } from "../../services/orderService";
 import { formatMoney } from "../../utils/formatters";
 import AdminOrderDetailDialog from "./AdminOrderDetailDialog";
+import GhnStatusBadge from "../../components/Shipping/GhnStatusBadge";
 import SalesDeliveryEditDialog from "./SalesDeliveryEditDialog";
 import { usePermissions } from "../../hooks/usePermissions";
 import { canSalesEditDelivery } from "../../utils/orderDeliveryEdit";
@@ -252,13 +253,18 @@ const OrderManagementPage = () => {
 
   const handleUpdateStatusSubmit = async () => {
     try {
-      await adminUpdateOrderStatus(statusForm.id, {
+      const updated = await adminUpdateOrderStatus(statusForm.id, {
         status: statusForm.status,
         adminNote: statusForm.adminNote,
         trackingCode: statusForm.trackingCode,
         cancelReason: statusForm.cancelReason,
       });
-      showSnackbar("Cập nhật trạng thái thành công");
+      const refundMsg = updated?.cancellationRefund?.message;
+      if (refundMsg) {
+        showSnackbar(refundMsg, updated.cancellationRefund.status === "COMPLETED" ? "success" : "info");
+      } else {
+        showSnackbar("Cập nhật trạng thái thành công");
+      }
       setStatusDialogOpen(false);
       loadOrders();
     } catch (error) {
@@ -459,6 +465,7 @@ const OrderManagementPage = () => {
                           />
                         </TableCell>
                         <TableCell align="center">
+                          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
                           <Tooltip
                             title={
                               salesQuickActions
@@ -492,6 +499,15 @@ const OrderManagementPage = () => {
                               }}
                             />
                           </Tooltip>
+                          {(order.ghnShippingStatus || order.ghnShippingStatusDisplay) && (
+                            <GhnStatusBadge
+                              status={order.ghnShippingStatus}
+                              statusDisplay={order.ghnShippingStatusDisplay}
+                              updatedAt={order.ghnStatusUpdatedAt}
+                              size="small"
+                            />
+                          )}
+                          </Box>
                         </TableCell>
                         <TableCell align="center">
                           <IconButton

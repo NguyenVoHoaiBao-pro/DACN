@@ -3,6 +3,7 @@ package com.electro.order.controller;
 import com.electro.shared.dto.ApiResponse;
 import com.electro.order.dto.GHNDto;
 import com.electro.order.service.GHNService;
+import com.electro.order.service.GhnWebhookService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +40,9 @@ public class GHNController {
 
     @Autowired
     private GHNService ghnService;
+
+    @Autowired
+    private GhnWebhookService ghnWebhookService;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ĐỊA CHỈ — Province / District / Ward
@@ -169,5 +173,21 @@ public class GHNController {
             @RequestBody GHNDto.CheckoutShippingRequest request) {
         GHNDto.CheckoutShippingResponse response = ghnService.getCheckoutShippingInfo(request);
         return ResponseEntity.ok(ApiResponse.success("Lấy thông tin vận chuyển thành công", response));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GHN WEBHOOK — Callback trạng thái vận chuyển (GHN → server)
+    // Đăng ký URL với GHN: https://<ngrok-domain>/api/shipping/ghn/webhook
+    // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+     * POST /api/shipping/ghn/webhook
+     * GHN gọi khi shipper cập nhật trạng thái vận đơn.
+     * Bắt buộc trả HTTP 200 — nếu không GHN retry 10 lần / 5 phút.
+     */
+    @PostMapping("/ghn/webhook")
+    public ResponseEntity<Void> ghnOrderStatusWebhook(@RequestBody GHNDto.WebhookCallbackRequest payload) {
+        ghnWebhookService.process(payload);
+        return ResponseEntity.ok().build();
     }
 }

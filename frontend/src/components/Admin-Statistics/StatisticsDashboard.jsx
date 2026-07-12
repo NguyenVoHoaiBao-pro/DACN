@@ -61,6 +61,8 @@ import {
     getPaymentMethodStats,
     getConversionRates,
     getCustomerSegments,
+    getActionKpis,
+    getCategoryRevenueChart,
 } from "../../services/statisticsService";
 import StatCard from "./StatCard";
 import RevenueChart from "./RevenueChart";
@@ -69,6 +71,8 @@ import TopProductsCard from "./TopProductsCard";
 import PaymentMethodsBar from "./PaymentMethodsBar";
 import ConversionRateTable from "./ConversionRateTable";
 import CustomerSegmentsChart from "./CustomerSegmentsChart";
+import ActionKpiCards from "./ActionKpiCards";
+import CategoryRevenueChart from "./CategoryRevenueChart";
 
 /**
  * Premium Statistics Dashboard Component
@@ -86,8 +90,13 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
     const [paymentStats, setPaymentStats] = useState(null);
     const [conversionRateData, setConversionRateData] = useState(null);
     const [customerSegmentsData, setCustomerSegmentsData] = useState(null);
+    const [actionKpis, setActionKpis] = useState(null);
+    const [categoryRevenueData, setCategoryRevenueData] = useState(null);
 
     const [period, setPeriod] = useState("month");
+    const [customStart, setCustomStart] = useState("");
+    const [customEnd, setCustomEnd] = useState("");
+    const [appliedCustomRange, setAppliedCustomRange] = useState({ start: "", end: "" });
     const [anchorEl, setAnchorEl] = useState(null);
     const [toastOpen, setToastOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState("");
@@ -103,16 +112,42 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
             return null;
         });
 
+    const resolveChartDateRange = () => {
+        if (period === "custom" && appliedCustomRange.start && appliedCustomRange.end) {
+            return { startDate: appliedCustomRange.start, endDate: appliedCustomRange.end };
+        }
+        const end = new Date();
+        const start = new Date();
+        if (period === "day") {
+            start.setDate(end.getDate() - 30);
+        } else if (period === "year") {
+            start.setFullYear(end.getFullYear() - 5);
+        } else {
+            start.setMonth(end.getMonth() - 12);
+        }
+        return {
+            startDate: start.toISOString().slice(0, 10),
+            endDate: end.toISOString().slice(0, 10),
+        };
+    };
+
     const fetchData = async () => {
         setLoading(true);
         setError(null);
+        const chartPeriod = period === "custom" ? "custom" : period;
+        const { startDate, endDate } = resolveChartDateRange();
+        const revenueStart = period === "custom" ? appliedCustomRange.start : undefined;
+        const revenueEnd = period === "custom" ? appliedCustomRange.end : undefined;
+
         try {
             const tasks = [
                 safeStat(() => getOrderStatusStats()),
                 safeStat(() => getTopProductStats("best-selling", 50)),
                 safeStat(() => getRecentOrdersStats(50)),
+                safeStat(() => getActionKpis()),
                 isAdmin || isSales ? safeStat(() => getOverviewStats()) : Promise.resolve(null),
-                isAdmin ? safeStat(() => getRevenueChart(period)) : Promise.resolve(null),
+                isAdmin ? safeStat(() => getRevenueChart(chartPeriod, revenueStart, revenueEnd)) : Promise.resolve(null),
+                isAdmin ? safeStat(() => getCategoryRevenueChart(startDate, endDate)) : Promise.resolve(null),
                 isAdmin ? safeStat(() => getPaymentMethodStats()) : Promise.resolve(null),
                 isAdmin ? safeStat(() => getConversionRates()) : Promise.resolve(null),
                 isAdmin ? safeStat(() => getCustomerSegments()) : Promise.resolve(null),
@@ -124,8 +159,10 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
                 statusRes,
                 bestSellingRes,
                 recentOrdersRes,
+                actionKpisRes,
                 overviewRes,
                 revenueRes,
+                categoryRes,
                 paymentRes,
                 convRes,
                 segRes,
@@ -135,8 +172,10 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
             setOrderStatusData(statusRes);
             setBestSellingData(bestSellingRes);
             setRecentOrders(recentOrdersRes?.recentOrders || []);
+            setActionKpis(actionKpisRes);
             setOverview(overviewRes);
             setRevenueData(revenueRes);
+            setCategoryRevenueData(categoryRes);
             setPaymentStats(paymentRes);
             setConversionRateData(convRes);
             setCustomerSegmentsData(segRes);
@@ -167,7 +206,7 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
 
     useEffect(() => {
         fetchData();
-    }, [period, isAdmin, isSales]);
+    }, [period, appliedCustomRange, isAdmin, isSales]);
 
     const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
     const handleCloseMenu = () => setAnchorEl(null);
@@ -176,10 +215,20 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
         handleCloseMenu();
     };
 
+    const handleApplyCustomRange = () => {
+        if (customStart && customEnd) {
+            setAppliedCustomRange({ start: customStart, end: customEnd });
+            setPeriod("custom");
+        }
+    };
+
     const periodLabel = {
         day: "7 ngày qua",
         month: "30 ngày qua",
         year: "12 tháng qua",
+        custom: appliedCustomRange.start && appliedCustomRange.end
+            ? `${appliedCustomRange.start} → ${appliedCustomRange.end}`
+            : "Tùy chỉnh",
     }[period];
 
     if (error) {
@@ -232,7 +281,17 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
                     </Typography>
                 </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                    {isAdmin && (
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            href="/admin/finance"
+                            sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+                        >
+                            Sổ cái →
+                        </Button>
+                    )}
                     <Button
                         startIcon={<CalendarToday />}
                         onClick={handleOpenMenu}
@@ -262,8 +321,43 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
                         <MenuItem onClick={() => handlePeriodChange("day")}>7 ngày qua</MenuItem>
                         <MenuItem onClick={() => handlePeriodChange("month")}>30 ngày qua</MenuItem>
                         <MenuItem onClick={() => handlePeriodChange("year")}>12 tháng qua</MenuItem>
+                        <MenuItem onClick={() => { setPeriod("custom"); handleCloseMenu(); }}>Tùy chỉnh ngày</MenuItem>
                     </Menu>
+                    {period === "custom" && (
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                            <input
+                                type="date"
+                                value={customStart}
+                                onChange={(e) => setCustomStart(e.target.value)}
+                                style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontFamily: "inherit" }}
+                            />
+                            <Typography color="text.secondary">→</Typography>
+                            <input
+                                type="date"
+                                value={customEnd}
+                                onChange={(e) => setCustomEnd(e.target.value)}
+                                style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontFamily: "inherit" }}
+                            />
+                            <Button
+                                variant="contained"
+                                size="small"
+                                disabled={!customStart || !customEnd}
+                                onClick={handleApplyCustomRange}
+                                sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+                            >
+                                Lọc
+                            </Button>
+                        </Box>
+                    )}
                 </Box>
+            </Box>
+
+            {/* Action KPIs — việc cần xử lý ngay */}
+            <Box sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" fontWeight={800} color="text.secondary" sx={{ mb: 1.5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Cần xử lý
+                </Typography>
+                <ActionKpiCards data={actionKpis} loading={loading} />
             </Box>
 
             {/* KPI Cards — 4 columns, always side by side */}
@@ -322,12 +416,17 @@ const StatisticsDashboard = ({ isAdmin = true, isSales = true }) => {
                 </Box>
             </Box>
 
-            {/* Insights Section — top products + payment methods */}
-            <Box sx={{ display: "flex", gap: 3, mb: 3, alignItems: "stretch" }}>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
+            {/* Insights Section — top products + payment methods + category */}
+            <Box sx={{ display: "flex", gap: 3, mb: 3, alignItems: "stretch", flexWrap: "wrap" }}>
+                <Box sx={{ flex: { xs: "1 1 100%", lg: "1" }, minWidth: 0 }}>
                     <TopProductsCard data={bestSellingData} loading={loading} />
                 </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
+                {isAdmin && (
+                    <Box sx={{ flex: { xs: "1 1 100%", lg: "1" }, minWidth: 0 }}>
+                        <CategoryRevenueChart data={categoryRevenueData} loading={loading} />
+                    </Box>
+                )}
+                <Box sx={{ flex: { xs: "1 1 100%", lg: "1" }, minWidth: 0 }}>
                     <PaymentMethodsBar data={paymentStats} loading={loading} />
                 </Box>
             </Box>

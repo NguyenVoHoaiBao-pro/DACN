@@ -8,7 +8,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Table(name = "products")
+@Table(name = "products", indexes = {
+        @Index(name = "idx_products_is_active", columnList = "is_active"),
+        @Index(name = "idx_products_active_featured", columnList = "is_active, is_featured")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -65,9 +68,11 @@ public class Product {
     private Producer producer;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<ProductVariant> variants;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<Image> images;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
@@ -77,7 +82,7 @@ public class Product {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-    }
+    }   
 
     @PreUpdate
     protected void onUpdate() {

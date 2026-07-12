@@ -13,6 +13,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.electro.auth.client.UserClient;
@@ -160,6 +163,127 @@ public class AuthController {
             }
         }
         return ResponseEntity.ok(ApiResponse.success("Logged out", null));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@RequestBody Map<String, String> body) {
+        String email = body != null ? body.get("email") : null;
+        if (!StringUtils.hasText(email)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "Email is required"));
+        }
+        try {
+            Map<String, Object> result = userClient.forgotPassword(Map.of("email", email.trim()));
+            if (result != null && Boolean.TRUE.equals(result.get("success"))) {
+                String message = result.get("message") != null
+                        ? result.get("message").toString()
+                        : "Email đã được gửi";
+                return ResponseEntity.ok(ApiResponse.success(message, null));
+            }
+            String message = result != null && result.get("message") != null
+                    ? result.get("message").toString()
+                    : "Không thể gửi email";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, message));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "Forgot password failed: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@RequestBody Map<String, String> body) {
+        if (body == null || !StringUtils.hasText(body.get("token"))
+                || !StringUtils.hasText(body.get("newPassword"))
+                || !StringUtils.hasText(body.get("confirmPassword"))) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "token, newPassword and confirmPassword are required"));
+        }
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("token", body.get("token").trim());
+            payload.put("newPassword", body.get("newPassword"));
+            payload.put("confirmPassword", body.get("confirmPassword"));
+            Map<String, Object> result = userClient.resetPassword(payload);
+            if (result != null && Boolean.TRUE.equals(result.get("success"))) {
+                String message = result.get("message") != null
+                        ? result.get("message").toString()
+                        : "Đặt lại mật khẩu thành công";
+                return ResponseEntity.ok(ApiResponse.success(message, null));
+            }
+            String message = result != null && result.get("message") != null
+                    ? result.get("message").toString()
+                    : "Đặt lại mật khẩu thất bại";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, message));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "Reset password failed: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/qr/generate")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> generateQrToken() {
+        try {
+            Map<String, Object> result = userClient.generateQrToken();
+            if (result != null && Boolean.TRUE.equals(result.get("success"))) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("qrToken", result.get("qrToken"));
+                return ResponseEntity.ok(ApiResponse.success(data));
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "Failed to generate QR token"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "QR generate failed: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/qr/status/{token}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getQrStatus(@PathVariable String token) {
+        try {
+            Map<String, Object> result = userClient.getQrStatus(token);
+            if (result == null || Boolean.FALSE.equals(result.get("success"))) {
+                String message = result != null && result.get("message") != null
+                        ? result.get("message").toString()
+                        : "Invalid QR token";
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, message));
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            String status = result.get("status") != null ? result.get("status").toString() : "PENDING";
+            data.put("status", status);
+
+            if ("VERIFIED".equals(status)) {
+                data.putAll(buildAuthData(result));
+            }
+
+            return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "QR status failed: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/qr/verify")
+    public ResponseEntity<ApiResponse<Void>> verifyQrToken(
+            @RequestParam String token,
+            @RequestParam Integer userId) {
+        if (!StringUtils.hasText(token) || userId == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(400, "token and userId are required"));
+        }
+        try {
+            Map<String, Object> result = userClient.verifyQrToken(token.trim(), userId);
+            if (result != null && Boolean.TRUE.equals(result.get("success"))) {
+                return ResponseEntity.ok(ApiResponse.success("QR verified", null));
+            }
+            String message = result != null && result.get("message") != null
+                    ? result.get("message").toString()
+                    : "QR verification failed";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, message));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(500, "QR verify failed: " + e.getMessage()));
+        }
     }
 
     private Map<String, Object> buildAuthData(Map<String, Object> userServiceResponse) {

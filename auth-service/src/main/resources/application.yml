@@ -11,7 +11,7 @@ spring:
           enabled: true
   data:
     redis:
-      # Redis Cloud (cloud.redis.io): dat REDIS_* trong .env — xem .env.example
+      # Redis local (Docker electro-redis): dat REDIS_* trong .env — xem .env.example
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}

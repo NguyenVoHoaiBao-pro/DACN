@@ -2,6 +2,7 @@ package com.electro.catalog.repository;
 
 import com.electro.catalog.dto.ProductDto;
 import com.electro.catalog.entity.Product;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -15,6 +16,12 @@ public final class ProductSearchSpecification {
 
     public static Specification<Product> buildSearchSpec(ProductDto.SearchRequest request) {
         return (root, query, cb) -> {
+            if (query != null && !Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
+                root.fetch("productType", JoinType.INNER);
+                root.fetch("producer", JoinType.INNER);
+                query.distinct(true);
+            }
+
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isTrue(root.get("isActive")));
 

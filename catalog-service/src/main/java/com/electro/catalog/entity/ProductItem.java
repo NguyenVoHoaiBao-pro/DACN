@@ -24,6 +24,18 @@ public class ProductItem {
     @Column(name = "serial_number", unique = true, length = 100)
     private String serialNumber;
 
+    @Column(name = "batch_number", length = 50)
+    private String batchNumber;
+
+    @Column(name = "purchase_order_id")
+    private Integer purchaseOrderId;
+
+    @Column(name = "stock_lot_id")
+    private Integer stockLotId;
+
+    @Column(name = "location", length = 100)
+    private String location;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ProductItemStatus status = ProductItemStatus.AVAILABLE;

@@ -902,7 +902,7 @@ public class GHNService {
     /**
      * Dịch mã trạng thái GHN sang tiếng Việt.
      */
-    private String translateGHNStatus(String ghnStatus) {
+    public String translateGHNStatus(String ghnStatus) {
         if (ghnStatus == null) return "Không xác định";
         return switch (ghnStatus.toLowerCase()) {
             case "ready_to_pick"    -> "Chờ lấy hàng";

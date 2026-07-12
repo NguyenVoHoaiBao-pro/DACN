@@ -24,6 +24,11 @@ public class PaymentConfig {
      */
     private String backendBaseUrl = "http://localhost:8080";
 
+    /**
+     * Khi true: nếu gateway refund lỗi (sandbox/credentials), mô phỏng thành công để demo luồng.
+     */
+    private boolean refundSimulateOnError = false;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VNPay Configuration
     // ═══════════════════════════════════════════════════════════════════════════
@@ -41,6 +46,11 @@ public class PaymentConfig {
         private String orderType = "other";
         private String locale = "vn";
         private String currCode = "VND";
+        /**
+         * Dev local only: bỏ qua PKIX khi gọi API refund/querydr (Java HttpClient → VNPay).
+         * Production phải để false.
+         */
+        private boolean trustAllSsl = false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -54,6 +64,7 @@ public class PaymentConfig {
         private String accessKey = "YOUR_ACCESS_KEY";
         private String secretKey = "YOUR_SECRET_KEY";
         private String apiUrl = "https://test-payment.momo.vn/v2/gateway/api/create";
+        private String refundUrl = "https://test-payment.momo.vn/v2/gateway/api/refund";
         private String returnUrl = "http://localhost:8080/api/payment/momo/return";
         private String ipnUrl = "http://localhost:8080/api/payment/momo/ipn";
         private String requestType = "payWithMethod";

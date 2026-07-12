@@ -33,6 +33,21 @@ public class PurchaseOrder {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "discrepancy_reason", columnDefinition = "TEXT")
+    private String discrepancyReason;
+
+    @Column(name = "discrepancy_evidence", columnDefinition = "MEDIUMTEXT")
+    private String discrepancyEvidence;
+
+    @Column(name = "received_by_user_id")
+    private Integer receivedByUserId;
+
+    @Column(name = "approved_by_user_id")
+    private Integer approvedByUserId;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
     @Column(name = "order_date")
     private LocalDateTime orderDate;
 
@@ -72,6 +87,6 @@ public class PurchaseOrder {
     }
 
     public enum PurchaseOrderStatus {
-        DRAFT, PENDING, APPROVED, RECEIVING, COMPLETED, CANCELLED
+        DRAFT, PENDING, APPROVED, IN_TRANSIT, RECEIVING, RECEIVED, COMPLETED, CANCELLED
     }
 }

@@ -1,6 +1,8 @@
 package com.electro.statistics.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -11,8 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.electro.statistics.client.CatalogClient;
 import com.electro.statistics.client.OrderStatisticsClient;
+import com.electro.statistics.dto.ActionKpisDTO;
+import com.electro.statistics.dto.CategoryRevenueChartDTO;
 import com.electro.statistics.dto.ConversionRateStatsDTO;
 import com.electro.statistics.dto.CustomerSegmentStatsDTO;
+import com.electro.statistics.dto.FinanceLedgerDTO;
+import com.electro.statistics.dto.FinanceSummaryDTO;
 import com.electro.statistics.dto.OrderStatusStatsDTO;
 import com.electro.statistics.dto.OverviewStatisticsDTO;
 import com.electro.statistics.dto.PaymentMethodStatsDTO;
@@ -187,6 +193,129 @@ public class StatisticsDashboardService {
 
     public CustomerSegmentStatsDTO getCustomerSegments() {
         return CustomerSegmentStatsDTO.builder().segments(List.of()).build();
+    }
+
+    public ActionKpisDTO getActionKpis() {
+        Map<String, Object> data = safeOrderCall(orderStatisticsClient::getActionKpis, Map.of());
+        long criticalLowStock = 0;
+        try {
+            List<CatalogClient.LowStockVariant> variants = catalogClient.getLowStockVariants();
+            criticalLowStock = variants.stream()
+                    .filter(v -> v.getStockQuantity() != null && v.getStockQuantity() < 5)
+                    .count();
+        } catch (Exception ignored) {
+        }
+        return ActionKpisDTO.builder()
+                .pendingOrders(toLong(data.get("pendingOrders")))
+                .pendingImeiOrders(toLong(data.get("pendingImeiOrders")))
+                .pendingRefundCount(toLong(data.get("pendingRefundCount")))
+                .pendingReturnReviews(toLong(data.get("pendingReturnReviews")))
+                .openWarrantyClaims(toLong(data.get("openWarrantyClaims")))
+                .returnsInTransit(toLong(data.get("returnsInTransit")))
+                .criticalLowStock(criticalLowStock)
+                .build();
+    }
+
+    public CategoryRevenueChartDTO getCategoryRevenueChart(String startDate, String endDate) {
+        List<Map<String, Object>> productRows = safeOrderCall(
+                () -> orderStatisticsClient.getRevenueByProduct(startDate, endDate), List.of());
+
+        Map<Integer, CategoryRevenueChartDTO.CategorySlice> categoryMap = new HashMap<>();
+        Map<Integer, String> productTypeNames = new HashMap<>();
+
+        for (Map<String, Object> row : productRows) {
+            Integer productId = toInt(row.get("productId"));
+            BigDecimal revenue = toBigDecimal(row.get("revenue"));
+            Long quantity = toLong(row.get("quantitySold"));
+
+            Integer typeId = null;
+            String typeName = "Chưa phân loại";
+            try {
+                CatalogClient.ProductResponse product = catalogClient.getProductById(productId);
+                typeId = product.getProductTypeId();
+                typeName = product.getProductTypeName() != null ? product.getProductTypeName() : "Chưa phân loại";
+                if (typeId != null) {
+                    productTypeNames.put(typeId, typeName);
+                }
+            } catch (Exception ignored) {
+            }
+
+            int key = typeId != null ? typeId : -1;
+            CategoryRevenueChartDTO.CategorySlice existing = categoryMap.get(key);
+            if (existing == null) {
+                categoryMap.put(key, CategoryRevenueChartDTO.CategorySlice.builder()
+                        .categoryId(typeId)
+                        .categoryName(typeName)
+                        .revenue(revenue)
+                        .quantitySold(quantity)
+                        .build());
+            } else {
+                existing.setRevenue(existing.getRevenue().add(revenue));
+                existing.setQuantitySold(existing.getQuantitySold() + quantity);
+            }
+        }
+
+        BigDecimal totalRevenue = categoryMap.values().stream()
+                .map(CategoryRevenueChartDTO.CategorySlice::getRevenue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<CategoryRevenueChartDTO.CategorySlice> slices = categoryMap.values().stream()
+                .sorted((a, b) -> b.getRevenue().compareTo(a.getRevenue()))
+                .peek(slice -> {
+                    double pct = totalRevenue.compareTo(BigDecimal.ZERO) > 0
+                            ? slice.getRevenue().multiply(BigDecimal.valueOf(100))
+                                    .divide(totalRevenue, 2, RoundingMode.HALF_UP).doubleValue()
+                            : 0.0;
+                    slice.setPercentage(pct);
+                })
+                .collect(Collectors.toList());
+
+        return CategoryRevenueChartDTO.builder()
+                .categories(slices)
+                .totalRevenue(totalRevenue)
+                .build();
+    }
+
+    public FinanceSummaryDTO getFinanceSummary(String startDate, String endDate) {
+        Map<String, Object> data = safeOrderCall(
+                () -> orderStatisticsClient.getFinanceSummary(startDate, endDate), Map.of());
+        return FinanceSummaryDTO.builder()
+                .startDate((String) data.get("startDate"))
+                .endDate((String) data.get("endDate"))
+                .totalPaymentIn(toBigDecimal(data.get("totalPaymentIn")))
+                .totalRefundOut(toBigDecimal(data.get("totalRefundOut")))
+                .netCashFlow(toBigDecimal(data.get("netCashFlow")))
+                .pendingRefundAmount(toBigDecimal(data.get("pendingRefundAmount")))
+                .pendingRefundCount(toLong(data.get("pendingRefundCount")))
+                .build();
+    }
+
+    public FinanceLedgerDTO getFinanceLedger(String startDate, String endDate, int page, int limit) {
+        Map<String, Object> data = safeOrderCall(
+                () -> orderStatisticsClient.getFinanceLedger(startDate, endDate, page, limit),
+                Map.of("entries", List.of(), "total", 0, "page", page, "limit", limit, "totalPages", 0));
+        List<Map<String, Object>> raw = (List<Map<String, Object>>) data.get("entries");
+        List<FinanceLedgerDTO.LedgerEntry> entries = raw == null ? List.of() : raw.stream()
+                .map(e -> FinanceLedgerDTO.LedgerEntry.builder()
+                        .id((String) e.get("id"))
+                        .type((String) e.get("type"))
+                        .direction((String) e.get("direction"))
+                        .referenceCode((String) e.get("referenceCode"))
+                        .title((String) e.get("title"))
+                        .amount(toBigDecimal(e.get("amount")))
+                        .method((String) e.get("method"))
+                        .status((String) e.get("status"))
+                        .occurredAt((String) e.get("occurredAt"))
+                        .orderCode((String) e.get("orderCode"))
+                        .build())
+                .collect(Collectors.toList());
+        return FinanceLedgerDTO.builder()
+                .entries(entries)
+                .total(toInt(data.get("total")))
+                .page(toInt(data.get("page")))
+                .limit(toInt(data.get("limit")))
+                .totalPages(toInt(data.get("totalPages")))
+                .build();
     }
 
     public RevenueStatisticsDTO getRevenueStatistics() {

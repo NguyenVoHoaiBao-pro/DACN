@@ -79,10 +79,10 @@ const CreateWarrantyTicketModal = ({ open, onClose, onSuccess }) => {
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-            <DialogTitle sx={{ m: 0, p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#f8f9fa" }}>
+            <DialogTitle component="div" sx={{ m: 0, p: 2, display: "flex", alignItems: "center", justifyContent: "space-between", bgcolor: "#f8f9fa" }}>
                 <Box display="flex" alignItems="center" gap={1}>
                     <ShieldIcon color="primary" />
-                    <Typography variant="h6" fontWeight="bold">Tạo phiếu bảo hành</Typography>
+                    <Typography variant="h6" component="span" fontWeight="bold">Tạo phiếu bảo hành</Typography>
                 </Box>
                 <IconButton onClick={onClose} size="small">
                     <CloseIcon />

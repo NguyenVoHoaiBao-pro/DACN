@@ -10,9 +10,9 @@ spring:
         alphanumeric-ids:
           enabled: true
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:mysql-11ae5c82-cjcakvalvajvjallh.i.aivencloud.com}:${MYSQL_PORT:28570}/electro_user_db?useSSL=${MYSQL_USE_SSL:true}&requireSSL=${MYSQL_REQUIRE_SSL:true}&sslMode=${MYSQL_SSL_MODE:REQUIRED}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
-    username: ${MYSQL_USER:avnadmin}
-    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/electro_user_db?useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -21,6 +21,21 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
 
 server:
   port: 8083
@@ -33,6 +48,12 @@ google:
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: 86400000
+
+app:
+  mail:
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
+    from-name: ${MAIL_FROM_NAME:Electro Store}
+    frontend-base-url: ${APP_FRONTEND_URL:http://localhost:5173}
 
 springdoc:
   api-docs:

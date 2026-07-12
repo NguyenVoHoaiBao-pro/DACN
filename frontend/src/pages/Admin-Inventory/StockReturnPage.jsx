@@ -1,19 +1,23 @@
 import { useState } from "react";
 import {
-  Alert, Box, Button, Card, CardContent, Divider, FormControlLabel, Radio, RadioGroup,
-  Snackbar, TextField, Typography, CircularProgress
+  Alert, Box, Button, Card, CardContent, Chip, Divider, FormControlLabel, Radio, RadioGroup,
+  Snackbar, TextField, Typography, CircularProgress,
 } from "@mui/material";
 import {
   Search as SearchIcon,
   AssignmentReturn as ReturnIcon,
   CheckCircle as CheckIcon,
-  Error as ErrorIcon
+  Error as ErrorIcon,
 } from "@mui/icons-material";
 import AdminLayout from "../../components/Admin-Layout/AdminLayout";
 import { processStockReturn } from "../../services/inventoryService";
+import { adminGetOrders } from "../../services/orderService";
 
 const StockReturnPage = () => {
   const [imei, setImei] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderResult, setOrderResult] = useState(null);
+  const [orderLoading, setOrderLoading] = useState(false);
   const [reason, setReason] = useState("");
   const [isDefective, setIsDefective] = useState("false");
   const [loading, setLoading] = useState(false);
@@ -23,9 +27,28 @@ const StockReturnPage = () => {
     setToast({ open: true, message, severity });
   };
 
+  const handleOrderSearch = async () => {
+    if (!orderSearch.trim()) return;
+    setOrderLoading(true);
+    setOrderResult(null);
+    try {
+      const page = await adminGetOrders(0, 5, null, orderSearch.trim());
+      const match = page?.content?.[0];
+      if (match) {
+        setOrderResult(match);
+      } else {
+        showToast("Không tìm thấy đơn hàng.", "warning");
+      }
+    } catch {
+      showToast("Tra cứu đơn thất bại.", "error");
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!imei.trim()) {
-      showToast("Vui lòng nhập hoặc quét mã IMEI / Serial Number", "warning");
+      showToast("Vui lòng nhập hoặc quét mã Serial Number", "warning");
       return;
     }
     
@@ -48,7 +71,7 @@ const StockReturnPage = () => {
       }
     } catch (err) {
       if (err.response?.status === 404) {
-        showToast("CẢNH BÁO: Mã IMEI này không do hệ thống cung cấp. Vui lòng kiểm tra lại hoá đơn.", "error");
+        showToast("CẢNH BÁO: Mã Serial này không do hệ thống cung cấp. Vui lòng kiểm tra lại hoá đơn.", "error");
       } else if (err.response?.status === 403) {
         showToast("Bạn không có quyền xử lý đổi/trả hàng. Liên hệ Admin!", "error");
       } else {
@@ -75,16 +98,37 @@ const StockReturnPage = () => {
           </Typography>
         </Box>
 
+        <Card sx={{ maxWidth: 800, borderRadius: 3, mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+              Tra cứu theo mã đơn / vận đơn
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+              <TextField size="small" fullWidth placeholder="ORD-... hoặc mã vận đơn"
+                value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} />
+              <Button variant="outlined" onClick={handleOrderSearch} disabled={orderLoading}>
+                {orderLoading ? <CircularProgress size={20} /> : "Tìm"}
+              </Button>
+            </Box>
+            {orderResult && (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                Đơn <strong>{orderResult.orderCode}</strong> · {orderResult.shippingName} ·{" "}
+                <Chip size="small" label={orderResult.status} />
+                {orderResult.trackingCode && <> · VĐ: {orderResult.trackingCode}</>}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
         <Card sx={{ maxWidth: 800, borderRadius: 3 }}>
           <CardContent sx={{ p: 4 }}>
-            {/* IMEI Input */}
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Quét mã IMEI / Serial
+              Quét mã Serial Number
             </Typography>
             <TextField
               fullWidth
               variant="outlined"
-              placeholder="VD: 351234567890125"
+              placeholder="VD: SN-F2LDN3K4N741"
               value={imei}
               onChange={(e) => setImei(e.target.value)}
               sx={{ mb: 4, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}

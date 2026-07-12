@@ -1,5 +1,5 @@
 """
-app.py — FastAPI microservice gợi ý Hybrid (TF-IDF + SVD).
+app.py — FastAPI microservice gợi ý (Item-based CF).
 
 Chạy: uvicorn app:app --host 0.0.0.0 --port 5003
 """
@@ -17,16 +17,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Dam bao duong dan goc trong sys.path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
-from config.settings import API_PORT, CBF_WEIGHT, SVD_WEIGHT
-from collaborativefiltering.recommend import reco_service
-from contentbased.content_model import content_model
-from hybrid.engine import hybrid_engine
+from config.settings import API_PORT
+from collaborativefiltering.recommend import cf_service
 import collaborativefiltering.train as train_pipeline
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -34,6 +36,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Hang so
+# ---------------------------------------------------------------------------
 DEFAULT_TOP_K = 10
 MAX_TOP_K = 50
 
@@ -41,23 +46,23 @@ EUREKA_SERVER_URL = os.getenv("EUREKA_SERVER_URL", "http://localhost:8761/eureka
 APP_NAME = os.getenv("APP_NAME", "reco-service")
 INSTANCE_HOST = os.getenv("INSTANCE_HOST", "localhost")
 
+# ---------------------------------------------------------------------------
+# FastAPI App
+# ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Hybrid Recommendation Service",
-    description=(
-        "Gợi ý lai TF-IDF (Content-Based) + SVD (Collaborative). "
-        "Trang chi tiết SP: user_id + anchor. Trang chủ: SVD-only."
-    ),
-    version="6.0.0",
+    title="Item-based CF Recommendation Service",
+    description="Goi y theo rating da duyet + lich su mua (khong dung user_interactions).",
+    version="3.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8080",
+        "http://localhost:8080",       # Spring Boot
         "http://127.0.0.1:8080",
-        "http://localhost:3000",
+        "http://localhost:3000",        # ReactJS Dev Server
         "http://127.0.0.1:3000",
-        "*",
+        "*",                            # Docker / development
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -66,10 +71,9 @@ app.add_middleware(
 
 startup_time = time.time()
 
-
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Đăng ký Eureka: %s — app=%s", EUREKA_SERVER_URL, APP_NAME)
+    logger.info(f"Bat dau dang ky voi Eureka: {EUREKA_SERVER_URL} voi ten {APP_NAME}")
     try:
         await eureka_client.init_async(
             eureka_server=EUREKA_SERVER_URL,
@@ -78,20 +82,21 @@ async def startup_event():
             instance_port=int(API_PORT),
             health_check_url="/actuator/health",
         )
-        logger.info("Đăng ký Eureka thành công!")
+        logger.info("Dang ky Eureka THANH CONG!")
     except Exception as e:
-        logger.error("Lỗi đăng ký Eureka: %s", e)
-
+        logger.error(f"Loi dang ky Eureka: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Hủy đăng ký Eureka...")
+    logger.info("Huy dang ky Eureka truoc khi tat may chu...")
     try:
         await eureka_client.stop_async()
     except Exception as e:
-        logger.error("Lỗi hủy đăng ký Eureka: %s", e)
+        logger.error(f"Loi huy dang ky Eureka: {e}")
 
-
+# ---------------------------------------------------------------------------
+# Middleware: Response Time header
+# ---------------------------------------------------------------------------
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
@@ -101,186 +106,150 @@ async def add_process_time_header(request: Request, call_next):
     return response
 
 
-def _model_ready() -> bool:
-    return reco_service.metadata is not None
-
-
+# ---------------------------------------------------------------------------
+# Endpoint: Home & API docs navigation
+# ---------------------------------------------------------------------------
 @app.get("/")
 async def home():
-    loaded = _model_ready()
-    meta = reco_service.metadata or {}
+    loaded = cf_service.metadata is not None
     return {
-        "service": "Hybrid Recommendation Microservice (TF-IDF + SVD)",
-        "version": meta.get("version", "N/A") if loaded else "N/A",
-        "model_type": meta.get("model_type", "N/A") if loaded else "N/A",
-        "fusion_weights": {"svd": SVD_WEIGHT, "cbf": CBF_WEIGHT},
-        "content_model_loaded": content_model.is_trained,
+        "service": "Recommendation Microservice (FastAPI)",
+        "version": cf_service.metadata.get("version", "N/A") if loaded else "N/A",
         "status": "running" if loaded else "degraded",
         "docs_url": "/docs",
         "endpoints": {
             "health": "GET /health",
-            "homepage": "GET /api/recommend?user_id=10001",
-            "product_detail_hybrid": "GET /api/recommend/hybrid?user_id=10001&anchor_product_id=20001",
-            "similar_cbf": "GET /api/recommend/similar/20001",
+            "recommend_modern": "GET /api/recommend?user_id=10001&top_n=10",
+            "recommend_legacy": "GET /recommend/10001?top_k=10",
             "retrain": "POST /api/retrain",
         },
     }
 
 
+# ---------------------------------------------------------------------------
+# Endpoint: Health Check (Spring Boot Actuator)
+# ---------------------------------------------------------------------------
 @app.get("/health")
 @app.get("/actuator/health")
 async def health():
-    loaded = _model_ready()
+    loaded = cf_service.metadata is not None
     if not loaded:
         return JSONResponse(
             status_code=503,
             content={
                 "status": "DOWN",
                 "model_loaded": False,
-                "content_model_loaded": content_model.is_trained,
-                "error": "Model chưa được nạp. Hãy chạy /api/retrain trước.",
+                "error": "Model chua duoc nap. Hay chay /api/retrain truoc.",
             },
         )
 
-    perf = reco_service.metadata.get("performance", {})
     return {
         "status": "UP",
         "model_loaded": True,
-        "content_model_loaded": content_model.is_trained,
-        "model_type": reco_service.metadata.get("model_type", "hybrid_svd_tfidf"),
-        "model_version": reco_service.metadata.get("version", "N/A"),
-        "fusion_weights": {"svd": SVD_WEIGHT, "cbf": CBF_WEIGHT},
-        "total_users": reco_service.metadata["stats"]["users"],
-        "total_items": reco_service.metadata["stats"]["products"],
-        "content_products": len(content_model.product_ids),
-        "rmse": perf.get("rmse"),
+        "model_version": cf_service.metadata.get("version", "N/A"),
+        "data_source": cf_service.metadata.get("data_source", "N/A"),
+        "total_users": cf_service.metadata["stats"]["users"],
+        "total_items": cf_service.metadata["stats"]["products"],
+        "total_ratings": cf_service.metadata["stats"]["interactions"],
+        "cold_start_pool": len(cf_service.metadata.get("best_sellers", [])),
         "uptime_seconds": round(time.time() - startup_time),
     }
 
 
-@app.get("/api/recommend/similar/{product_id}")
-async def recommend_similar(
-    product_id: int,
-    top_n: int = Query(DEFAULT_TOP_K, description="Số sản phẩm tương tự (1-50)"),
-):
-    """Trang chi tiết — CBF thuần (không cần user)."""
-    top_n = max(1, min(top_n, MAX_TOP_K))
-    try:
-        strategy, recommendations = hybrid_engine.get_similar_products(product_id, top_k=top_n)
-        return {
-            "anchor_product_id": product_id,
-            "algorithm": "content_based_tfidf",
-            "strategy": strategy,
-            "top_k": top_n,
-            "recommendations": recommendations,
-        }
-    except Exception as exc:
-        logger.exception("Loi similar product_id=%s", product_id)
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@app.get("/api/recommend/hybrid")
-async def recommend_hybrid_session(
-    user_id: str = Query(..., description="ID người dùng"),
-    anchor_product_id: int = Query(..., description="SP đang xem (anchor)"),
-    top_n: int = Query(DEFAULT_TOP_K, description="Số gợi ý (1-50)"),
-):
-    """Trang chi tiết — Hybrid session: user + anchor."""
-    top_n = max(1, min(top_n, MAX_TOP_K))
-    try:
-        strategy, recommendations = hybrid_engine.get_hybrid_recommendations(
-            user_id, anchor_product_id, top_n=top_n
-        )
-        return {
-            "user_id": user_id,
-            "anchor_product_id": anchor_product_id,
-            "algorithm": "hybrid_tfidf_svd",
-            "strategy": strategy,
-            "top_k": top_n,
-            "recommendations": recommendations,
-        }
-    except Exception as exc:
-        logger.exception("Loi hybrid user=%s anchor=%s", user_id, anchor_product_id)
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
+# ---------------------------------------------------------------------------
+# Endpoint: Goi y ca nhan hoa (Modern)
+# ---------------------------------------------------------------------------
 @app.get("/api/recommend")
 async def recommend_modern(
-    user_id: str = Query(..., description="ID người dùng (trang chủ)"),
-    top_n: int = Query(DEFAULT_TOP_K, description="Số sản phẩm gợi ý (1-50)"),
+    user_id: str = Query(..., description="ID cua nguoi dung can goi y"),
+    top_n: int = Query(DEFAULT_TOP_K, description="So san pham can goi y (1-50)"),
 ):
+    """Endpoint goi y ca nhan hoa."""
     t0 = time.time()
     top_n = max(1, min(top_n, MAX_TOP_K))
 
     try:
-        strategy, recommendations = hybrid_engine.get_user_recommendations(user_id, top_n=top_n)
+        strategy, recommendations = cf_service.get_recommendations(user_id, top_n=top_n)
         elapsed = round((time.time() - t0) * 1000, 2)
-        is_cold_start = "cold-start" in strategy.lower() or "Popular" in strategy
+
         return {
             "user_id": user_id,
-            "status": "cold_start" if is_cold_start else "success",
-            "algorithm": "svd_collaborative",
+            "status": "success",
             "strategy": strategy,
             "top_k": top_n,
             "response_time_ms": elapsed,
             "recommendations": recommendations,
         }
     except Exception as exc:
-        logger.exception("Lỗi gợi ý cho user_id %s", user_id)
-        raise HTTPException(status_code=500, detail="Lỗi máy chủ nội bộ: %s" % str(exc))
+        logger.exception("Loi khi xu ly goi y cho user_id %s", user_id)
+        raise HTTPException(status_code=500, detail="Loi may chu noi bo: %s" % str(exc))
 
 
+# ---------------------------------------------------------------------------
+# Endpoint: Tuong thich nguoc Spring Boot (Legacy)
+# ---------------------------------------------------------------------------
 @app.get("/recommend/{user_id}")
 async def recommend_legacy(
     user_id: str,
-    top_k: int = Query(DEFAULT_TOP_K, description="Số sản phẩm gợi ý (1-50)"),
+    top_k: int = Query(DEFAULT_TOP_K, description="So san pham can goi y (1-50)"),
 ):
+    """Endpoint tuong thich nguoc hoan toan voi he thong Spring Boot cu."""
     t0 = time.time()
     top_k = max(1, min(top_k, MAX_TOP_K))
 
     try:
-        strategy, recommendations = hybrid_engine.get_user_recommendations(user_id, top_n=top_k)
+        strategy, recommendations = cf_service.get_recommendations(user_id, top_n=top_k)
         elapsed = round((time.time() - t0) * 1000, 2)
-        is_personalized = "SVD" in strategy
+
+        status_label = "personalized" if "Collaborative" in strategy else "cold_start"
+
         return {
             "user_id": user_id,
-            "status": "personalized" if is_personalized else "cold_start",
+            "status": status_label,
             "top_k": top_k,
             "total_candidates": len(recommendations),
             "response_time_ms": elapsed,
             "recommendations": recommendations,
         }
     except Exception as exc:
-        logger.exception("Lỗi legacy recommend cho user_id %s", user_id)
-        raise HTTPException(status_code=500, detail="Lỗi máy chủ: %s" % str(exc))
+        logger.exception("Loi xu ly legacy recommend cho user_id %s", user_id)
+        raise HTTPException(status_code=500, detail="Loi may chu: %s" % str(exc))
 
 
+# ---------------------------------------------------------------------------
+# Background Retrain & Hot-Reload
+# ---------------------------------------------------------------------------
 def _background_retrain_and_reload():
+    """Chay ngam huan luyen lai model va reload vao RAM."""
     try:
-        logger.info("RETRAIN: Bắt đầu huấn luyện Hybrid (SVD + TF-IDF)...")
+        logger.info("RETRAIN: Bat dau chay lai luong huan luyen offline...")
         train_pipeline.main()
-        logger.info("RETRAIN: Huấn luyện xong. Hot-reload...")
+        logger.info("RETRAIN: Huan luyen hoan thanh. Dang hot-reload...")
 
-        success = reco_service.load_model()
+        success = cf_service.load_model()
         if success:
-            logger.info("RETRAIN: Hot reload thành công!")
+            logger.info("RETRAIN: Hot reload model moi thanh cong!")
         else:
-            logger.error("RETRAIN: Lỗi nạp lại model.")
+            logger.error("RETRAIN: Loi nap lai model moi.")
     except Exception as exc:
-        logger.error("RETRAIN: Lỗi nghiêm trọng: %s", exc)
+        logger.error("RETRAIN: Loi nghiem trong khi chay ngam: %s", exc)
 
 
 @app.post("/api/retrain")
 async def trigger_retrain(background_tasks: BackgroundTasks):
+    """Kich hoat chay huan luyen ngam (Async Background Task)."""
     background_tasks.add_task(_background_retrain_and_reload)
     return {
         "status": "accepted",
-        "message": "Đã bắt đầu huấn luyện lại Hybrid SVD + TF-IDF (background).",
+        "message": "Da bat dau tien trinh huan luyen lai model ngam.",
     }
 
 
+# ---------------------------------------------------------------------------
+# Direct execution
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("Khởi động Hybrid Recommendation Service cổng %d...", API_PORT)
+    logger.info("Dang khoi dong FastAPI CF Service tai cong %d...", API_PORT)
     uvicorn.run("app:app", host="0.0.0.0", port=API_PORT, reload=False)

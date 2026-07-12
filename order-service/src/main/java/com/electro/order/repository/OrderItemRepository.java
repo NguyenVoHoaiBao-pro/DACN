@@ -18,4 +18,13 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
 
     @Query("SELECT COUNT(oi) FROM OrderItem oi WHERE oi.orderDetail.id = :orderDetailId")
     long countByOrderDetailId(@Param("orderDetailId") Integer orderDetailId);
+
+    @Query("""
+            SELECT oi FROM OrderItem oi
+            JOIN FETCH oi.orderDetail od
+            JOIN FETCH od.order o
+            WHERE LOWER(oi.serialNumber) = LOWER(:code)
+               OR LOWER(oi.imei) = LOWER(:code)
+            """)
+    java.util.Optional<OrderItem> findBySerialOrImeiWithOrder(@Param("code") String code);
 }

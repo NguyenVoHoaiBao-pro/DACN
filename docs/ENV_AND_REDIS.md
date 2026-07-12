@@ -1,4 +1,4 @@
-# Cấu hình môi trường (.env) & Redis Cloud
+# Cấu hình môi trường (.env) & Redis local
 
 Tài liệu tập trung cho **biến môi trường** khi chạy local với `START.ps1`.
 
@@ -13,23 +13,31 @@ Tài liệu tập trung cho **biến môi trường** khi chạy local với `ST
 
 ---
 
-## MySQL (Aiven)
+## MySQL (Docker local)
+
+Khởi động: `docker compose up -d` (container `electro-mysql`, port `3306`).
 
 | Biến | Mô tả |
 |------|--------|
-| `MYSQL_HOST` | Host Aiven |
-| `MYSQL_PORT` | Port (vd `28570`) |
-| `MYSQL_USER` | `avnadmin` |
-| `MYSQL_PASSWORD` | Mật khẩu Aiven |
-| `MYSQL_USE_SSL` | `true` |
-| `MYSQL_REQUIRE_SSL` | `true` |
-| `MYSQL_SSL_MODE` | `REQUIRED` |
+| `MYSQL_HOST` | `localhost` |
+| `MYSQL_PORT` | `3306` |
+| `MYSQL_USER` | `root` |
+| `MYSQL_PASSWORD` | Để trống (mặc định Docker) |
+| `MYSQL_USE_SSL` | `false` |
 
-Các service đọc qua `application.yml`: `${MYSQL_PASSWORD}`, `${MYSQL_HOST}`, …
+Import schema sau khi MySQL chạy:
+
+```powershell
+.\scripts\Import-Databases.ps1
+```
+
+Các service đọc qua `application.yml`: `${MYSQL_HOST}`, `${MYSQL_PORT}`, …
 
 ---
 
-## Redis Cloud (refresh token + statistics)
+## Redis (Docker local)
+
+Khởi động: cùng `docker compose up -d` (container `electro-redis`, port `6379`).
 
 ### Vai trò
 
@@ -38,30 +46,17 @@ Các service đọc qua `application.yml`: `${MYSQL_PASSWORD}`, `${MYSQL_HOST}`,
 | **auth-service** | Refresh token (`auth:refresh:{uuid}`), TTL 7 ngày |
 | **statistics-service** | Hàng đợi analytics (`analytics:interactions_queue`) |
 
-### Cách 1 — `REDIS_URL` (khuyên dùng)
+### Cấu hình khuyên dùng
 
 ```env
-REDIS_URL=redis://default:PASSWORD@HOST.db.redis.io:14085
-```
-
-| Scheme | Ý nghĩa |
-|--------|---------|
-| `redis://` | Không TLS (port public cloud.redis.io thường dùng) |
-| `rediss://` | Có TLS |
-
-Khi có `REDIS_URL`, **auth-service** và **statistics-service** dùng `RedisUrlConfiguration` (ưu tiên hơn host/port).
-
-### Cách 2 — Tách biến
-
-```env
-REDIS_HOST=xxx.db.redis.io
-REDIS_PORT=14085
-REDIS_USERNAME=default
-REDIS_PASSWORD=...
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_USERNAME=
+REDIS_PASSWORD=
 REDIS_SSL=false
 ```
 
-Dùng khi **không** đặt `REDIS_URL`.
+**Không** đặt `REDIS_URL` khi dev local — nếu có, auth/statistics sẽ ưu tiên URL đó thay vì host/port.
 
 ### Kiểm tra kết nối
 
@@ -70,7 +65,7 @@ pip install redis   # lần đầu
 .\scripts\Test-RedisConnection.ps1
 ```
 
-Kỳ vọng: `PING via URL: True` hoặc `Ket noi OK KHONG SSL`.
+Kỳ vọng: `Ket noi OK KHONG SSL`.
 
 Sau khi sửa `.env`:
 
@@ -85,8 +80,8 @@ Health auth: `http://localhost:8081/actuator/health` → `redis.status: UP`.
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |-------------|-------------|------------|
-| `redis: DOWN`, `NotSslRecordException` | `REDIS_SSL=true` nhưng server plain | `REDIS_SSL=false` hoặc `redis://` trong URL |
-| `WRONG_VERSION_NUMBER` (script Python) | Giống trên | Dùng `redis://` không phải `rediss://` |
+| `redis: DOWN`, connection refused | Redis chưa chạy | `docker compose up -d` |
+| `redis: DOWN`, `NotSslRecordException` | `REDIS_SSL=true` nhưng server plain | `REDIS_SSL=false` |
 | Login 503 `Redis unavailable` | Redis chưa kết nối | Chạy `Test-RedisConnection.ps1`, restart |
 | Health tổng thể `DOWN` | Chỉ do Redis DOWN | Sửa Redis; các component khác vẫn có thể UP |
 

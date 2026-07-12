@@ -39,9 +39,15 @@ import {
 import { formatDateTime, formatMoney } from "../../utils/formatters";
 import PaymentIcon from "@mui/icons-material/Payment";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import AssignmentReturnOutlinedIcon from "@mui/icons-material/AssignmentReturnOutlined";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import TrackingTimeline from "../../components/TrackingTimeline/TrackingTimeline";
 import WarrantyClaimFromOrderDialog from "../../components/Warranty/WarrantyClaimFromOrderDialog";
-import { canRequestWarrantyForItem } from "../../utils/warrantyFromOrder";
+import ReturnRequestFromOrderDialog from "../../components/Return/ReturnRequestFromOrderDialog";
+import { canRequestWarrantyForItem, buildWarrantyClaimContext } from "../../utils/warrantyFromOrder";
+import { canRequestReturnForItem, buildReturnRequestContext, canShowReturnActionForOrder, collectReturnableItems } from "../../utils/returnFromOrder";
+import { fetchMyReturnRequests, fetchMyReturnRequestDetail } from "../../services/customerReturnRequestService";
 
 // ─── Tabs trạng thái ─────────────────────────────────────────────────────────
 const STATUS_TABS = [
@@ -125,6 +131,31 @@ const OrderList = () => {
   // Yêu cầu bảo hành từ dòng sản phẩm
   const [claimDialog, setClaimDialog] = useState({ open: false, context: null });
 
+  // Yêu cầu trả hàng
+  const [returnDialog, setReturnDialog] = useState({ open: false, context: null, existing: null });
+  const [returnBySerial, setReturnBySerial] = useState({});
+  const [serialPicker, setSerialPicker] = useState({ open: false, options: [], orderDetail: null });
+
+  const loadMyReturnRequests = useCallback(async () => {
+    try {
+      const res = await fetchMyReturnRequests();
+      const list = res?.data || [];
+      const map = {};
+      list.forEach((r) => {
+        if (r.serialNumber && !["CANCELLED", "REJECTED", "EXPIRED"].includes(r.status)) {
+          map[r.serialNumber] = r;
+        }
+      });
+      setReturnBySerial(map);
+    } catch {
+      setReturnBySerial({});
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMyReturnRequests();
+  }, [loadMyReturnRequests]);
+
   // ─── Fetch danh sách đơn hàng ───
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -136,7 +167,20 @@ const OrderList = () => {
       setTotalPages(data?.totalPages || 0);
     } catch (err) {
       console.error("Lỗi load đơn hàng:", err);
-      setError("Không thể tải danh sách đơn hàng. Vui lòng thử lại.");
+      const status = err.response?.status;
+      const msg = err.response?.data?.message;
+      if (status === 503) {
+        setError(
+          "Hệ thống đơn hàng tạm thời không phản hồi (service đang khởi động lại). Đợi ~30 giây rồi tải lại trang."
+        );
+      } else if (status === 502 || status === 500) {
+        setError(
+          msg ||
+            "Lỗi máy chủ khi tải đơn hàng. Kiểm tra order-service / catalog-service đã chạy (START.ps1) rồi thử lại."
+        );
+      } else {
+        setError(msg || "Không thể tải danh sách đơn hàng. Vui lòng thử lại.");
+      }
     } finally {
       setLoading(false);
     }
@@ -186,11 +230,18 @@ const OrderList = () => {
   const handleCancelOrder = async () => {
     setCancelLoading(true);
     try {
-      await cancelOrder(cancelDialog.orderId, cancelReason.trim() || null);
+      const updated = await cancelOrder(cancelDialog.orderId, cancelReason.trim() || null);
+      const refundMsg = updated?.cancellationRefund?.message;
+      if (refundMsg) {
+        toast.success(refundMsg);
+      } else {
+        toast.success("Đã hủy đơn hàng.");
+      }
       setCancelDialog({ open: false, orderId: null, orderCode: "" });
-      fetchOrders(); // refresh danh sách
+      fetchOrders();
     } catch (err) {
       console.error("Lỗi hủy đơn:", err);
+      toast.error(err.response?.data?.message || "Hủy đơn thất bại.");
     } finally {
       setCancelLoading(false);
     }
@@ -212,6 +263,129 @@ const OrderList = () => {
     } finally {
       setRetryLoading(false);
     }
+  };
+
+  const openReturnForRow = async (orderDetail, row) => {
+    if (row.existing?.id) {
+      try {
+        const res = await fetchMyReturnRequestDetail(row.existing.id);
+        setReturnDialog({
+          open: true,
+          context: buildReturnRequestContext(orderDetail, row.item, row.imei),
+          existing: res?.data || row.existing,
+        });
+      } catch {
+        setReturnDialog({
+          open: true,
+          context: buildReturnRequestContext(orderDetail, row.item, row.imei),
+          existing: row.existing,
+        });
+      }
+    } else {
+      setReturnDialog({
+        open: true,
+        context: buildReturnRequestContext(orderDetail, row.item, row.imei),
+        existing: null,
+      });
+    }
+  };
+
+  const handleReturnFlow = async (order, e) => {
+    e?.stopPropagation?.();
+    let detail = orderDetail?.id === order.id ? orderDetail : null;
+    if (!detail) {
+      setExpandedOrderId(order.id);
+      setDetailLoading(true);
+      try {
+        detail = await getOrderDetail(order.orderCode);
+        setOrderDetail(detail);
+      } catch (err) {
+        toast.error("Không tải được chi tiết đơn hàng.");
+        return;
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+    const returnables = collectReturnableItems(detail, returnBySerial);
+    if (returnables.length === 0) {
+      toast.warning(
+        "Chưa thể trả hàng online: đơn cần trạng thái Đã giao/Hoàn thành, đã thanh toán và shop đã gán Serial/IMEI.",
+        { autoClose: 7000 },
+      );
+      return;
+    }
+    if (returnables.length === 1) {
+      await openReturnForRow(detail, returnables[0]);
+      return;
+    }
+    setSerialPicker({ open: true, options: returnables, orderDetail: detail });
+  };
+
+  const renderOrderActionBar = (order, detail) => {
+    if (!detail || detail.id !== order.id) return null;
+    const showReturn = canShowReturnActionForOrder(order);
+    if (!showReturn) return null;
+
+    return (
+      <Box
+        sx={{
+          mt: 2,
+          pt: 2,
+          borderTop: "1px solid #eee",
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr 1fr", sm: "1fr 1fr" },
+          gap: 1.5,
+        }}
+      >
+        <Button
+          variant="outlined"
+          startIcon={<ChatBubbleOutlineIcon />}
+          onClick={() => navigate("/contact")}
+          sx={{ textTransform: "none", fontWeight: 600, borderRadius: 2, py: 1.2, color: "#333", borderColor: "#ccc" }}
+        >
+          Liên hệ
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<StorefrontOutlinedIcon />}
+          onClick={() => navigate("/shop")}
+          sx={{ textTransform: "none", fontWeight: 600, borderRadius: 2, py: 1.2, color: "#333", borderColor: "#ccc" }}
+        >
+          Ghé thăm Shop
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<AssignmentReturnOutlinedIcon />}
+          onClick={(e) => handleReturnFlow(order, e)}
+          sx={{
+            textTransform: "none",
+            fontWeight: 700,
+            borderRadius: 2,
+            py: 1.2,
+            color: "#c2410c",
+            borderColor: "#c2410c",
+            bgcolor: "#fff7ed",
+            "&:hover": { bgcolor: "#ffedd5", borderColor: "#9a3412" },
+          }}
+        >
+          Trả hàng / Hoàn tiền
+        </Button>
+        <Button
+          variant="contained"
+          disabled
+          sx={{
+            textTransform: "none",
+            fontWeight: 700,
+            borderRadius: 2,
+            py: 1.2,
+            bgcolor: "#f28900",
+            "&.Mui-disabled": { bgcolor: "#fdba74", color: "#fff" },
+          }}
+        >
+          {detail.status === "COMPLETED" ? "Đã nhận hàng" : "Chờ giao hàng"}
+        </Button>
+      </Box>
+    );
   };
 
   return (
@@ -360,6 +534,27 @@ const OrderList = () => {
                         Hủy đơn
                       </Button>
                     )}
+
+                    {/* Trả hàng — hiện ngay trên header đơn (Đã giao / Hoàn thành) */}
+                    {canShowReturnActionForOrder(order) && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<AssignmentReturnOutlinedIcon />}
+                        onClick={(e) => handleReturnFlow(order, e)}
+                        sx={{
+                          textTransform: "none",
+                          fontWeight: 700,
+                          borderRadius: 2,
+                          borderColor: "#c2410c",
+                          color: "#c2410c",
+                          bgcolor: "#fff7ed",
+                        }}
+                      >
+                        Trả hàng / Hoàn tiền
+                      </Button>
+                    )}
                   </Box>
                 </AccordionSummary>
 
@@ -469,6 +664,49 @@ const OrderList = () => {
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                               {formatMoney(item.totalPrice)}
                             </Typography>
+                            {canRequestReturnForItem(
+                              orderDetail.status,
+                              item.assignedImeis,
+                              orderDetail.paymentStatus,
+                            ) && item.assignedImeis?.map((imei) => {
+                              const existing = returnBySerial[imei];
+                              return (
+                                <Button
+                                  key={`ret-${imei}`}
+                                  size="small"
+                                  variant={existing ? "outlined" : "contained"}
+                                  color="error"
+                                  startIcon={<AssignmentReturnOutlinedIcon />}
+                                  sx={{ textTransform: "none", fontWeight: 600, borderRadius: 2, whiteSpace: "nowrap" }}
+                                  onClick={async () => {
+                                    if (existing?.id) {
+                                      try {
+                                        const res = await fetchMyReturnRequestDetail(existing.id);
+                                        setReturnDialog({
+                                          open: true,
+                                          context: buildReturnRequestContext(orderDetail, item, imei),
+                                          existing: res?.data || existing,
+                                        });
+                                      } catch {
+                                        setReturnDialog({
+                                          open: true,
+                                          context: buildReturnRequestContext(orderDetail, item, imei),
+                                          existing,
+                                        });
+                                      }
+                                    } else {
+                                      setReturnDialog({
+                                        open: true,
+                                        context: buildReturnRequestContext(orderDetail, item, imei),
+                                        existing: null,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  {existing ? `Trả hàng (${existing.statusLabel})` : "Trả hàng / Hoàn tiền"}
+                                </Button>
+                              );
+                            })}
                             {canRequestWarrantyForItem(orderDetail.status, item.assignedImeis) && (
                               <Button
                                 size="small"
@@ -479,13 +717,7 @@ const OrderList = () => {
                                 onClick={() =>
                                   setClaimDialog({
                                     open: true,
-                                    context: {
-                                      orderId: orderDetail.id,
-                                      orderDetailId: item.id,
-                                      orderCode: orderDetail.orderCode,
-                                      productName: item.productName,
-                                      imei: item.assignedImeis[0],
-                                    },
+                                    context: buildWarrantyClaimContext(orderDetail, item),
                                   })
                                 }
                               >
@@ -672,6 +904,8 @@ const OrderList = () => {
                           </Box>
                         </Grid>
                       </Grid>
+
+                      {renderOrderActionBar(order, orderDetail)}
                     </>
                   ) : null}
                 </AccordionDetails>
@@ -758,6 +992,59 @@ const OrderList = () => {
         context={claimDialog.context}
         onClose={() => setClaimDialog({ open: false, context: null })}
       />
+      <ReturnRequestFromOrderDialog
+        open={returnDialog.open}
+        onClose={() => setReturnDialog({ open: false, context: null, existing: null })}
+        context={returnDialog.context}
+        existingRequest={returnDialog.existing}
+        onSuccess={() => loadMyReturnRequests()}
+      />
+
+      <Dialog
+        open={serialPicker.open}
+        onClose={() => setSerialPicker({ open: false, options: [], orderDetail: null })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle component="div">
+          <Typography component="span" variant="h6" fontWeight={700}>
+            Chọn sản phẩm cần trả
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Đơn có nhiều máy/serial. Chọn một sản phẩm để tạo yêu cầu trả hàng.
+          </Typography>
+          {serialPicker.options.map((row) => (
+            <Button
+              key={row.imei}
+              fullWidth
+              variant="outlined"
+              sx={{ mb: 1, justifyContent: "flex-start", textTransform: "none", py: 1.2 }}
+              onClick={async () => {
+                const detail = serialPicker.orderDetail;
+                setSerialPicker({ open: false, options: [], orderDetail: null });
+                await openReturnForRow(detail, row);
+              }}
+            >
+              <Box sx={{ textAlign: "left" }}>
+                <Typography variant="body2" fontWeight={600}>{row.item.productName}</Typography>
+                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{row.imei}</Typography>
+                {row.existing && (
+                  <Typography variant="caption" display="block" color="warning.main">
+                    {row.existing.statusLabel}
+                  </Typography>
+                )}
+              </Box>
+            </Button>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSerialPicker({ open: false, options: [], orderDetail: null })}>
+            Đóng
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

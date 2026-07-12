@@ -23,6 +23,19 @@ export const searchProducts = async (params) => {
   return res.data;
 };
 
+/** Gợi ý tìm kiếm nhanh (autocomplete) — q ≥ 2 ký tự */
+export const suggestProducts = async (q, productTypeId = null, limit = 8, config = {}) => {
+  const params = { q, limit };
+  if (productTypeId != null) {
+    params.product_type_id = productTypeId;
+  }
+  const res = await httpClient.get(`${PUBLIC_API}/suggest`, {
+    params,
+    signal: config.signal,
+  });
+  return res.data;
+};
+
 export const getProductsByCategory = async (productTypeId, page = 0, size = 10) => {
   const res = await httpClient.get(`${PUBLIC_API}/product-type/${productTypeId}?page=${page}&size=${size}`);
   return res.data;

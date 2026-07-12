@@ -56,6 +56,9 @@ public class ProductVariant {
     @Column(name = "low_stock_threshold")
     private Integer lowStockThreshold = 10;
 
+    @Column(name = "requires_serial", nullable = false)
+    private Boolean requiresSerial = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

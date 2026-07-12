@@ -56,6 +56,16 @@ public class AdminOrderController {
         return ResponseEntity.ok(ApiResponse.success("Order stats", orderService.getOrderStats()));
     }
 
+    @GetMapping("/warehouse/fulfillment-queue")
+    @PreAuthorize("hasAnyAuthority('ORDER_ASSIGN_SHIPPING', 'ORDER_TRACKING_UPDATE', 'IMEI_MANAGE', 'ROLE_ADMIN', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Page<OrderDto.AdminOrderSummaryResponse>>> warehouseFulfillmentQueue(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("orderDate").ascending());
+        return ResponseEntity.ok(ApiResponse.success("Đơn chờ xuất kho",
+                orderService.warehouseFulfillmentQueue(pageable)));
+    }
+
     @GetMapping("/hidden")
     public ResponseEntity<ApiResponse<Page<OrderDto.AdminOrderSummaryResponse>>> getHiddenOrders(
             @RequestParam(value = "page", defaultValue = "0") int page,

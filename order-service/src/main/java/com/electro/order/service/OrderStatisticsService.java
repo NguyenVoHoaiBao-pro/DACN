@@ -1,8 +1,14 @@
 package com.electro.order.service;
 
+import com.electro.order.entity.CustomerReturnRequest;
 import com.electro.order.entity.Order;
+import com.electro.order.entity.RefundRequest;
+import com.electro.order.entity.WarrantyClaim;
+import com.electro.order.repository.CustomerReturnRequestRepository;
 import com.electro.order.repository.OrderDetailRepository;
 import com.electro.order.repository.OrderRepository;
+import com.electro.order.repository.RefundRequestRepository;
+import com.electro.order.repository.WarrantyClaimRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -25,6 +31,28 @@ public class OrderStatisticsService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final RefundRequestRepository refundRequestRepository;
+    private final CustomerReturnRequestRepository customerReturnRequestRepository;
+    private final WarrantyClaimRepository warrantyClaimRepository;
+
+    private static final List<RefundRequest.RefundStatus> PENDING_REFUND_STATUSES = List.of(
+            RefundRequest.RefundStatus.PENDING_APPROVAL,
+            RefundRequest.RefundStatus.AWAITING_MANUAL_TRANSFER,
+            RefundRequest.RefundStatus.PROCESSING,
+            RefundRequest.RefundStatus.FAILED
+    );
+
+    private static final List<WarrantyClaim.ClaimStatus> OPEN_WARRANTY_STATUSES = List.of(
+            WarrantyClaim.ClaimStatus.PENDING,
+            WarrantyClaim.ClaimStatus.RECEIVED,
+            WarrantyClaim.ClaimStatus.INSPECTING,
+            WarrantyClaim.ClaimStatus.REPAIRING
+    );
+
+    private static final List<Order.OrderStatus> IMEI_QUEUE_STATUSES = List.of(
+            Order.OrderStatus.CONFIRMED,
+            Order.OrderStatus.PROCESSING
+    );
 
     private final List<Order.OrderStatus> COMPLETED_STATUSES = List.of(
             Order.OrderStatus.DELIVERED,
@@ -66,23 +94,26 @@ public class OrderStatisticsService {
     public Map<String, Object> getRevenueChart(String period, String startDateStr, String endDateStr) {
         LocalDateTime end = LocalDateTime.now();
         LocalDateTime start;
+        String effectivePeriod;
 
         if (startDateStr != null && endDateStr != null) {
             start = LocalDate.parse(startDateStr).atStartOfDay();
             end = LocalDate.parse(endDateStr).atTime(LocalTime.MAX);
+            effectivePeriod = "custom";
         } else {
-            switch (period != null ? period : "month") {
+            effectivePeriod = period != null ? period : "month";
+            switch (effectivePeriod) {
                 case "day" -> start = end.minusDays(30).with(LocalTime.MIN);
                 case "year" -> start = end.minusYears(5).with(LocalTime.MIN);
                 default -> start = end.minusMonths(12).with(LocalTime.MIN);
             }
         }
 
-        String effectivePeriod = period != null ? period : "month";
-        List<Map<String, Object>> dataPoints = switch (effectivePeriod) {
-            case "day" -> buildDailyDataPoints(start, end);
+        String chartPeriod = effectivePeriod;
+        List<Map<String, Object>> dataPoints = switch (chartPeriod) {
+            case "day", "custom" -> buildDailyDataPointsFilled(start, end);
             case "year" -> buildYearlyDataPoints();
-            default -> buildMonthlyDataPoints(start, end);
+            default -> buildMonthlyDataPointsFilled(start, end);
         };
 
         BigDecimal totalRevenue = dataPoints.stream()
@@ -92,7 +123,7 @@ public class OrderStatisticsService {
                 totalRevenue.divide(BigDecimal.valueOf(dataPoints.size()), 0, RoundingMode.HALF_UP);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("period", effectivePeriod);
+        result.put("period", chartPeriod);
         result.put("dataPoints", dataPoints);
         result.put("totalRevenue", totalRevenue);
         result.put("averageRevenue", averageRevenue);
@@ -142,6 +173,35 @@ public class OrderStatisticsService {
         }).collect(Collectors.toList());
     }
 
+    public List<Map<String, Object>> getTopSellingProductsByProduct(int limit) {
+        List<Object[]> results = orderDetailRepository.findTopSellingProductsByProductId(
+                COMPLETED_STATUSES, PageRequest.of(0, limit));
+        AtomicInteger rank = new AtomicInteger(1);
+        return results.stream().map(row -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("rank", rank.getAndIncrement());
+            item.put("productId", toInt(row[0]));
+            item.put("quantitySold", toLong(row[1]));
+            item.put("revenue", toBigDecimal(row[2]));
+            return item;
+        }).collect(Collectors.toList());
+    }
+
+    public long countSoldProducts() {
+        return orderDetailRepository.countDistinctSoldProducts(COMPLETED_STATUSES);
+    }
+
+    public Map<Integer, Long> getSoldQuantitiesByProductIds(List<Integer> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Map.of();
+        }
+        return orderDetailRepository.sumQuantityByProductIds(COMPLETED_STATUSES, productIds).stream()
+                .collect(Collectors.toMap(
+                        row -> toInt(row[0]),
+                        row -> toLong(row[1]),
+                        Long::sum));
+    }
+
     public Map<String, Object> getRecentOrders(int limit) {
         List<Order> orders = orderRepository.findRecentOrders(PageRequest.of(0, limit));
         List<Map<String, Object>> summaries = orders.stream().map(o -> {
@@ -164,6 +224,38 @@ public class OrderStatisticsService {
         return result;
     }
 
+    public Map<String, Object> getActionKpis() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("pendingOrders", orderRepository.countByStatus(Order.OrderStatus.PENDING));
+        result.put("pendingImeiOrders", orderRepository.countOrdersWithIncompleteImei(IMEI_QUEUE_STATUSES));
+        result.put("pendingRefundCount", refundRequestRepository.countByStatusIn(PENDING_REFUND_STATUSES));
+        result.put("pendingReturnReviews", customerReturnRequestRepository.countByStatus(
+                CustomerReturnRequest.RequestStatus.PENDING_SALES_REVIEW));
+        result.put("openWarrantyClaims", warrantyClaimRepository.countByStatusIn(OPEN_WARRANTY_STATUSES));
+        result.put("returnsInTransit", customerReturnRequestRepository.countByStatusIn(List.of(
+                CustomerReturnRequest.RequestStatus.APPROVED,
+                CustomerReturnRequest.RequestStatus.SHIPPED_BY_CUSTOMER)));
+        return result;
+    }
+
+    public List<Map<String, Object>> getRevenueByProduct(String startDateStr, String endDateStr) {
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusMonths(12).with(LocalTime.MIN);
+        if (startDateStr != null && endDateStr != null) {
+            start = LocalDate.parse(startDateStr).atStartOfDay();
+            end = LocalDate.parse(endDateStr).atTime(LocalTime.MAX);
+        }
+        return orderDetailRepository.findRevenueByProductInDateRange(COMPLETED_STATUSES, start, end).stream()
+                .map(row -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("productId", toInt(row[0]));
+                    item.put("revenue", toBigDecimal(row[1]));
+                    item.put("quantitySold", toLong(row[2]));
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
     public Map<String, Object> getPaymentMethodStats() {
         List<Object[]> results = orderRepository.getPaymentMethodStats(CANCELLED_STATUS);
         long totalOrders = results.stream().mapToLong(row -> toLong(row[1])).sum();
@@ -181,6 +273,72 @@ public class OrderStatisticsService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("paymentStats", stats);
         return result;
+    }
+
+    private List<Map<String, Object>> buildDailyDataPointsFilled(LocalDateTime start, LocalDateTime end) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM");
+        Map<String, BigDecimal> revenueMap = new LinkedHashMap<>();
+        Map<String, Long> ordersMap = new LinkedHashMap<>();
+        List<String> labels = new ArrayList<>();
+
+        LocalDate cursor = start.toLocalDate();
+        LocalDate endDate = end.toLocalDate();
+        while (!cursor.isAfter(endDate)) {
+            String label = cursor.format(fmt);
+            labels.add(label);
+            revenueMap.put(label, BigDecimal.ZERO);
+            ordersMap.put(label, 0L);
+            cursor = cursor.plusDays(1);
+        }
+
+        for (Object[] row : orderRepository.getRevenueByDay(start, end, COMPLETED_STATUSES)) {
+            java.sql.Date date = (java.sql.Date) row[0];
+            String label = date.toLocalDate().format(fmt);
+            if (revenueMap.containsKey(label)) {
+                revenueMap.put(label, toBigDecimal(row[1]));
+                ordersMap.put(label, toLong(row[2]));
+            }
+        }
+
+        return labels.stream().map(label -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("label", label);
+            item.put("revenue", revenueMap.get(label));
+            item.put("orders", ordersMap.get(label));
+            return item;
+        }).collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> buildMonthlyDataPointsFilled(LocalDateTime start, LocalDateTime end) {
+        Map<String, BigDecimal> revenueMap = new LinkedHashMap<>();
+        Map<String, Long> ordersMap = new LinkedHashMap<>();
+        List<String> labels = new ArrayList<>();
+
+        LocalDate cursor = start.toLocalDate().withDayOfMonth(1);
+        LocalDate endMonth = end.toLocalDate().withDayOfMonth(1);
+        while (!cursor.isAfter(endMonth)) {
+            String label = String.format("%02d/%d", cursor.getMonthValue(), cursor.getYear());
+            labels.add(label);
+            revenueMap.put(label, BigDecimal.ZERO);
+            ordersMap.put(label, 0L);
+            cursor = cursor.plusMonths(1);
+        }
+
+        for (Object[] row : orderRepository.getRevenueByMonth(start, end, COMPLETED_STATUSES)) {
+            String label = String.format("%02d/%d", toInt(row[1]), toInt(row[0]));
+            if (revenueMap.containsKey(label)) {
+                revenueMap.put(label, toBigDecimal(row[2]));
+                ordersMap.put(label, toLong(row[3]));
+            }
+        }
+
+        return labels.stream().map(label -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("label", label);
+            item.put("revenue", revenueMap.get(label));
+            item.put("orders", ordersMap.get(label));
+            return item;
+        }).collect(Collectors.toList());
     }
 
     private List<Map<String, Object>> buildDailyDataPoints(LocalDateTime start, LocalDateTime end) {

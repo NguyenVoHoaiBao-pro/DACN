@@ -238,4 +238,38 @@ public class GHNDto {
         private String updatedDate;     // ISO date
         private String location;
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WEBHOOK — Callback trạng thái đơn hàng từ GHN
+    // Docs: https://api.ghn.vn/home/docs/detail (Callback của trạng thái đơn hàng)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class WebhookCallbackRequest {
+        @com.fasterxml.jackson.annotation.JsonProperty("OrderCode")
+        private String orderCode;
+        @com.fasterxml.jackson.annotation.JsonProperty("ClientOrderCode")
+        private String clientOrderCode;
+        @com.fasterxml.jackson.annotation.JsonProperty("Status")
+        private String status;
+        @com.fasterxml.jackson.annotation.JsonProperty("Time")
+        private String time;
+        @com.fasterxml.jackson.annotation.JsonProperty("Description")
+        private String description;
+        @com.fasterxml.jackson.annotation.JsonProperty("Reason")
+        private String reason;
+        @com.fasterxml.jackson.annotation.JsonProperty("ReasonCode")
+        private String reasonCode;
+        @com.fasterxml.jackson.annotation.JsonProperty("Warehouse")
+        private String warehouse;
+        @com.fasterxml.jackson.annotation.JsonProperty("Fee")
+        private Long fee;
+        @com.fasterxml.jackson.annotation.JsonProperty("CODAmount")
+        private Long codAmount;
+        @com.fasterxml.jackson.annotation.JsonProperty("TotalFee")
+        private Long totalFee;
+        @com.fasterxml.jackson.annotation.JsonProperty("IsPartialReturn")
+        private Boolean isPartialReturn;
+    }
 }

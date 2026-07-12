@@ -25,7 +25,6 @@ const Navigation = () => {
   const mainMenuItems = [
     { name: "Trang Chủ", path: "/" },
     { name: "Cửa Hàng", path: "/shop" },
-    { name: "Khuyến Mãi", path: "/single" },
     {
       name: "Thông Tin",
       path: "/pages",

@@ -7,14 +7,13 @@
 import Banner from "../components/Banner";
 import BestSellers from "../components/BestSellers";
 import OurProducts from "../components/OurProducts";
-import Promo from "../components/Promo";
 import AIRecommendation from "../components/AIRecommendation/AIRecommendation";
 
 const Home = () => {
   console.log(
     "🏠 Home.jsx: TRƯỚC KHI RENDER - Chuẩn bị truyền children cho MainLayout"
   );
-  console.log("🏠 Home.jsx: Children sẽ là Banner + Features + DemoSection");
+  console.log("🏠 Home.jsx: Children sẽ là Banner + AIRecommendation + BestSellers + OurProducts");
 
   return (
     <div className="home-page">
@@ -23,9 +22,6 @@ const Home = () => {
 
       {/* AI Recommendation Section */}
       <AIRecommendation />
-
-      {/* Promo section (replaces Features) */}
-      <Promo />
 
       {/* Best Sellers section */}
       <BestSellers />

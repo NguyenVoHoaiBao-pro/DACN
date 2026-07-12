@@ -28,7 +28,10 @@ if (-not $mysql) {
     exit 1
 }
 
-$files = Get-ChildItem $SchemaDir -Filter "*.sql" | Sort-Object Name
+$files = @(
+    Get-ChildItem $SchemaDir -Filter "*.sql"
+    Get-ChildItem $SchemaDir -File | Where-Object { $_.Name -match '^electro_.*_db$' }
+) | Sort-Object Name -Unique
 Write-Host "Import $($files.Count) database(s) -> ${Host}:${Port}" -ForegroundColor Cyan
 
 foreach ($f in $files) {

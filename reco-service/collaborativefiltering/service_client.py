@@ -174,24 +174,3 @@ def fetch_all_purchased_products_via_api() -> list:
     except Exception as exc:
         logger.error("fetch_all_purchased_products_via_api loi: %s", exc)
         return []
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Catalog Service API
-# ═══════════════════════════════════════════════════════════════════════════
-
-def fetch_products_for_reco_via_api() -> list:
-    """Lay metadata san pham active cho TF-IDF (Content-Based).
-
-    Returns: List[dict] keys: id, name, description, category, brand
-    """
-    try:
-        data = _call_service(
-            "catalog-service",
-            "/api/products/internal/export-for-reco",
-            timeout=HTTP_TIMEOUT_BULK,
-        )
-        return data
-    except Exception as exc:
-        logger.error("fetch_products_for_reco_via_api loi: %s", exc)
-        return []

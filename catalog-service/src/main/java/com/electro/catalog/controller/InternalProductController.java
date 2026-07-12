@@ -4,9 +4,11 @@ import com.electro.catalog.entity.Product;
 import com.electro.catalog.entity.ProductVariant;
 import com.electro.catalog.repository.ProductRepository;
 import com.electro.catalog.repository.ProductVariantRepository;
+import com.electro.catalog.service.InventoryAuditService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,25 +27,11 @@ public class InternalProductController {
     @Autowired
     private ProductVariantRepository productVariantRepository;
 
+    @Autowired
+    private InventoryAuditService inventoryAuditService;
+
     @Value("${app.server.url:http://localhost:8080}")
     private String serverUrl;
-
-    @GetMapping("/export-for-reco")
-    public List<RecoProductExport> exportForReco() {
-        return productRepository.findActiveWithTypeAndProducer().stream().map(p -> {
-            RecoProductExport row = new RecoProductExport();
-            row.setId(p.getId());
-            row.setName(p.getName());
-            String desc = p.getDescription();
-            if (desc == null || desc.isBlank()) {
-                desc = p.getShortDescription();
-            }
-            row.setDescription(desc != null ? desc : "");
-            row.setCategory(p.getProductType() != null ? p.getProductType().getName() : "");
-            row.setBrand(p.getProducer() != null ? p.getProducer().getName() : "");
-            return row;
-        }).toList();
-    }
 
     @GetMapping("/{productId}")
     public ProductResponse getProductById(@PathVariable("productId") Integer productId) {
@@ -53,12 +41,17 @@ public class InternalProductController {
         res.setName(product.getName());
         res.setIsActive(product.getIsActive());
         res.setRequiresImei(product.getRequiresImei());
+        if (product.getProductType() != null) {
+            res.setProductTypeId(product.getProductType().getId());
+            res.setProductTypeName(product.getProductType().getName());
+        }
         return res;
     }
 
     @GetMapping("/variants/{variantId}")
+    @Transactional(readOnly = true)
     public VariantResponse getVariantById(@PathVariable("variantId") Integer variantId) {
-        ProductVariant variant = productVariantRepository.findById(variantId).orElseThrow();
+        ProductVariant variant = productVariantRepository.findByIdWithProductAndImages(variantId).orElseThrow();
         VariantResponse res = new VariantResponse();
         res.setId(variant.getId());
         res.setSkuCode(variant.getSkuCode());
@@ -117,6 +110,10 @@ public class InternalProductController {
 
     @org.springframework.web.bind.annotation.PutMapping("/variants/{variantId}/stock")
     public void updateStock(@PathVariable("variantId") Integer variantId, @org.springframework.web.bind.annotation.RequestParam("delta") Integer delta) {
+        if (delta != null && delta < 0 && inventoryAuditService.isVariantLockedForSale(variantId)) {
+            throw new com.electro.catalog.exception.BadRequestException(
+                    "Sản phẩm đang trong phiếu kiểm kê — tạm khóa trừ tồn kho.");
+        }
         ProductVariant variant = productVariantRepository.findById(variantId).orElseThrow();
         if (variant.getStockQuantity() == null) {
             variant.setStockQuantity(0);
@@ -126,20 +123,13 @@ public class InternalProductController {
     }
 
     @Data
-    public static class RecoProductExport {
-        private Integer id;
-        private String name;
-        private String description;
-        private String category;
-        private String brand;
-    }
-
-    @Data
     public static class ProductResponse {
         private Integer id;
         private String name;
         private Boolean isActive;
         private Boolean requiresImei;
+        private Integer productTypeId;
+        private String productTypeName;
     }
 
     @Data

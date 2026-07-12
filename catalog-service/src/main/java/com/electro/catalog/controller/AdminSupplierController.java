@@ -19,7 +19,7 @@ public class AdminSupplierController {
     private final SupplierService supplierService;
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PRODUCT_MANAGE', 'ROLE_ADMIN', 'STOCK_IMPORT')")
     public ResponseEntity<ApiResponse<List<InventoryDto.SupplierResponse>>> getAll() {
         return ResponseEntity.ok(ApiResponse.success("Suppliers", supplierService.getAll()));
     }

@@ -24,6 +24,10 @@ public class InventoryDto {
         private List<ImportStockItem> items;
         private String supplier;
         private String note;
+        /** NV kho thực hiện nhập — bắt buộc khi ghi inventory_transactions.user_id */
+        private Integer userId;
+        private String referenceType;
+        private Integer referenceId;
     }
 
     @Data
@@ -32,8 +36,10 @@ public class InventoryDto {
         private String imei;
         private String reason;
         private Boolean isDefective;
+        private Integer userId;
     }
 
+    /** API nhập serial — field {@code imeis} giữ tên cũ; mỗi phần tử là một mã Serial (IMEI triển khai sau). */
     @Data
     public static class ImeiRequest {
         @NotNull
@@ -42,6 +48,32 @@ public class InventoryDto {
         private List<String> imeis;
         private String batchNumber;
         private String note;
+        /** Liên kết nhập IMEI theo đơn mua hàng (bắt buộc với Nhân viên Kho). */
+        private Integer purchaseOrderId;
+        private Integer purchaseOrderItemId;
+        private Integer stockLotId;
+        private Integer userId;
+    }
+
+    @Data
+    @lombok.Builder
+    public static class SerialFifoItem {
+        private Integer productItemId;
+        private String serialNumber;
+        private String batchNumber;
+        private String lotNumber;
+        private String shelfLocation;
+        private java.time.LocalDateTime receivedAt;
+    }
+
+    @Data
+    public static class ReturnByOrderRequest {
+        @NotNull
+        private String orderCode;
+        @NotNull
+        private String serialNumber;
+        private String reason;
+        private Boolean isDefective;
     }
 
     @Data

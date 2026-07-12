@@ -14,7 +14,7 @@ import org.springframework.util.StringUtils;
 import java.net.URI;
 
 /**
- * Khi dat REDIS_URL (vd rediss://default:pass@host:16379) tu Redis Cloud.
+ * Khi dat REDIS_URL (vd redis://:pass@host:6379) — uu tien hon REDIS_HOST/PORT.
  */
 @Configuration
 @ConditionalOnProperty(name = "REDIS_URL")

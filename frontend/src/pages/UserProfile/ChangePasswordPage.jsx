@@ -37,13 +37,20 @@ const ChangePasswordForm = () => {
     setChangingPassword(true);
     try {
       const res = await changeMyPassword({
-        oldPassword: passwordData.oldPassword,
+        currentPassword: passwordData.oldPassword,
         newPassword: passwordData.newPassword,
+        confirmPassword: passwordData.confirmPassword,
       });
       setSnackbar({ open: true, message: res.message || "Đổi mật khẩu thành công!", severity: "success" });
       setPasswordData({ oldPassword: "", newPassword: "", confirmPassword: "" });
     } catch (error) {
-      const msg = error.response?.data?.message || "Đổi mật khẩu thất bại. Mật khẩu cũ không đúng.";
+      const data = error.response?.data;
+      const fieldErrors = data?.data;
+      let msg = data?.message || "Đổi mật khẩu thất bại. Mật khẩu cũ không đúng.";
+      if (fieldErrors && typeof fieldErrors === "object") {
+        const first = Object.values(fieldErrors)[0];
+        if (first) msg = first;
+      }
       setSnackbar({ open: true, message: msg, severity: "error" });
     } finally {
       setChangingPassword(false);

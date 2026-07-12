@@ -103,14 +103,14 @@ const AIRecommendation = () => {
               display: "inline-block",
             }}
           >
-            {user ? "Gợi Ý Riêng Dành Cho Bạn" : "Sản Phẩm Được Mua Nhiều Nhất"}
+            Gợi ý dành cho Bạn
           </Typography>
         </Box>
         <Typography
           variant="body2"
           sx={{ color: "#666", display: { xs: "none", sm: "block" }, fontStyle: "italic" }}
         >
-          Được cá nhân hóa bởi AI
+          {user ? "Được cá nhân hóa bởi hệ thống gợi ý" : "Gợi ý từ hệ thống (đăng nhập để cá nhân hóa hơn)"}
         </Typography>
       </Box>
 

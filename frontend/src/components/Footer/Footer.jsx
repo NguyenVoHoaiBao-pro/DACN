@@ -214,7 +214,6 @@ const Footer = () => {
                 "Thương Hiệu",
                 "Thẻ Quà Tặng",
                 "Đối Tác Liên Kết",
-                "Khuyến Mãi",
                 "Lịch Sử Đơn Hàng",
                 "Theo Dõi Đơn Hàng",
               ]}

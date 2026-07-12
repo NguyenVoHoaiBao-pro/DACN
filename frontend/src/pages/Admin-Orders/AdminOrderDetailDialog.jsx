@@ -45,6 +45,7 @@ import { toast } from "react-toastify";
 import { adminAssignImei, adminGetOrderDetail } from "../../services/orderService";
 import { formatMoney } from "../../utils/formatters";
 import TrackingTimeline from "../../components/TrackingTimeline/TrackingTimeline";
+import GhnStatusBadge from "../../components/Shipping/GhnStatusBadge";
 
 // ─── IMEI Assignment Status Badge ───
 const ImeiStatusBadge = ({ assignedCount, totalCount }) => {
@@ -283,6 +284,18 @@ const AdminOrderDetailDialog = ({ open, orderId, onClose }) => {
                   <Typography>
                     <strong>Mã vận đơn:</strong> {order.trackingCode}
                   </Typography>
+                )}
+                {(order.ghnShippingStatus || order.ghnShippingStatusDisplay) && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                      <strong>Trạng thái GHN (webhook):</strong>
+                    </Typography>
+                    <GhnStatusBadge
+                      status={order.ghnShippingStatus}
+                      statusDisplay={order.ghnShippingStatusDisplay}
+                      updatedAt={order.ghnStatusUpdatedAt}
+                    />
+                  </Box>
                 )}
                 {order.cancelReason && (
                   <Typography color="error">

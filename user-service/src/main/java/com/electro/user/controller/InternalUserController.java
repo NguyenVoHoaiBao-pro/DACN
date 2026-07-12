@@ -45,6 +45,12 @@ public class InternalUserController {
     @Autowired
     private com.electro.user.service.GoogleAuthService googleAuthService;
 
+    @Autowired
+    private com.electro.user.service.PasswordResetService passwordResetService;
+
+    @Autowired
+    private com.electro.user.service.QrAuthService qrAuthService;
+
     @PostMapping("/login")
     public Map<String, Object> verifyLogin(@RequestBody Map<String, String> request) {
         String usernameOrEmail = request.get("username");
@@ -115,5 +121,70 @@ public class InternalUserController {
     @GetMapping("/username/{username}")
     public UserDto.Response getUserByUsername(@PathVariable("username") String username) {
         return userService.getUserByUsername(username);
+    }
+
+    @PostMapping("/forgot-password")
+    public Map<String, Object> forgotPassword(@Valid @RequestBody UserDto.ForgotPasswordRequest request) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String message = passwordResetService.requestPasswordReset(request.getEmail());
+            response.put("success", true);
+            response.put("message", message);
+        } catch (IllegalStateException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Không thể gửi email. Vui lòng thử lại sau.");
+        }
+        return response;
+    }
+
+    @PostMapping("/qr/generate")
+    public Map<String, Object> generateQrToken() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("qrToken", qrAuthService.generateToken());
+        return response;
+    }
+
+    @GetMapping("/qr/status/{token}")
+    public Map<String, Object> getQrStatus(@PathVariable("token") String token) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            return qrAuthService.getStatus(token);
+        } catch (BadRequestException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return response;
+        }
+    }
+
+    @PostMapping("/qr/verify")
+    public Map<String, Object> verifyQrToken(
+            @org.springframework.web.bind.annotation.RequestParam("token") String token,
+            @org.springframework.web.bind.annotation.RequestParam("userId") Integer userId) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            return qrAuthService.verify(token, userId);
+        } catch (BadRequestException | ResourceNotFoundException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return response;
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public Map<String, Object> resetPassword(@Valid @RequestBody UserDto.ResetPasswordRequest request) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String message = passwordResetService.resetPassword(request);
+            response.put("success", true);
+            response.put("message", message);
+        } catch (BadRequestException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+        }
+        return response;
     }
 }

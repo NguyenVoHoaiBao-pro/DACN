@@ -20,12 +20,11 @@ import {
   Menu,
   MenuItem,
   Select,
-  TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
 import axios from "axios";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -37,6 +36,7 @@ import {
   selectWishlistCount,
 } from "../../redux/appSlice";
 import Logo from "../UI/Logo";
+import ProductSearchAutocomplete from "../Search/ProductSearchAutocomplete";
 import "./Header.css";
 
 // Map tên danh mục → product_type_id
@@ -84,21 +84,7 @@ const Header = () => {
     navigate(`/shop?${params.toString()}`);
   };
 
-  // 🧠 Thêm Debounce cho Ô Tìm Kiếm live trên Trang Cửa Hàng
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      const isShopPage = window.location.pathname === "/shop";
-      if (isShopPage && searchTerm.trim() !== "") {
-        const params = new URLSearchParams();
-        params.set("keyword", searchTerm.trim());
-        const catId = categoryIdMap[selectedCategory];
-        if (catId) params.set("category", catId.toString());
-        navigate(`/shop?${params.toString()}`, { replace: true });
-      }
-    }, 500); // delay 500ms theo spec
-
-    return () => clearTimeout(handler);
-  }, [searchTerm, selectedCategory, navigate]);
+  const categoryId = categoryIdMap[selectedCategory] ?? null;
 
   const handleLogout = () => {
     dispatch(logout());
@@ -210,12 +196,13 @@ const Header = () => {
               </Select>
             </FormControl>
 
-            {/* Search Input */}
-            <TextField
+            {/* Smart search — autocomplete */}
+            <ProductSearchAutocomplete
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={setSearchTerm}
+              categoryId={categoryId}
+              onSubmit={handleSearch}
               placeholder="Bạn đang tìm kiếm gì?"
-              variant="outlined"
               sx={{
                 flex: 1,
                 "& .MuiOutlinedInput-root": {
@@ -236,10 +223,7 @@ const Header = () => {
                   padding: "12px 16px",
                   fontSize: "14px",
                   color: "#333",
-                  "&::placeholder": {
-                    color: "#999",
-                    opacity: 1,
-                  },
+                  "&::placeholder": { color: "#999", opacity: 1 },
                 },
               }}
             />

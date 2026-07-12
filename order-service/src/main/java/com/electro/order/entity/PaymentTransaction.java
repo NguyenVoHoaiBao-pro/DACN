@@ -83,6 +83,15 @@ public class PaymentTransaction {
     @Column(name = "ip_address", length = 50)
     private String ipAddress;
 
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
+    @Column(name = "refund_amount", precision = 15, scale = 2)
+    private BigDecimal refundAmount;
+
+    @Column(name = "refund_reason", columnDefinition = "TEXT")
+    private String refundReason;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -101,10 +110,11 @@ public class PaymentTransaction {
 
     // Enums
     public enum TransactionStatus {
-        PENDING,    // đang chờ thanh toán
-        SUCCESS,    // thanh toán thành công
-        FAILED,     // thanh toán thất bại
-        CANCELLED,  // user hủy thanh toán
-        EXPIRED     // hết hạn thanh toán
+        PENDING,
+        SUCCESS,
+        FAILED,
+        CANCELLED,
+        EXPIRED,
+        REFUNDED
     }
 }

@@ -30,10 +30,17 @@ public class ReviewController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction) {
+            @RequestParam(required = false) String direction) {
 
-        Sort.Direction dir = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sort));
+        String sortField = sort;
+        String sortDir = direction != null ? direction : "desc";
+        if (sort.contains(",")) {
+            String[] parts = sort.split(",", 2);
+            sortField = parts[0].trim();
+            sortDir = parts.length > 1 ? parts[1].trim() : sortDir;
+        }
+        Sort.Direction dir = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sortField));
         Page<ReviewDto.Response> reviews = reviewService.getProductReviews(productId, rating, pageable);
         return ResponseEntity.ok(ApiResponse.success("Reviews retrieved successfully", reviews));
     }

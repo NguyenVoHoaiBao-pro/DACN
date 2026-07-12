@@ -7,11 +7,25 @@ import { usePermissions } from "../../hooks/usePermissions";
  * Route được bảo vệ bằng RBAC phân quyền. Bất kỳ User nào khi gõ URL trên trình duyệt đều sẽ đi qua đây.
  * Nếu User không có cái quyền yêu cầu, hệ thống đá văng về Home Route.
  */
-const ProtectedRoute = ({ children, requiredPermission = null, requiredAny = [], requiredAll = [] }) => {
+const ProtectedRoute = ({
+    children,
+    requiredPermission = null,
+    requiredAny = [],
+    requiredAll = [],
+    /** Chặn Nhân viên Kho thuần (không phải Admin/Sales) — dùng cho route ngoài thẩm quyền kho. */
+    excludeWarehouseOnly = false,
+}) => {
     const isLoggedIn = useSelector(selectIsLoggedIn);
     const user = useSelector(selectUser);
     const location = useLocation();
-    const { hasPermission, hasAnyPermission, hasAllPermissions } = usePermissions();
+    const {
+        hasPermission,
+        hasAnyPermission,
+        hasAllPermissions,
+        isWarehouseUser,
+        isAdminUser,
+        isSalesUser,
+    } = usePermissions();
 
     // 1. NGĂN CHẶN CƠ BẢN (CHƯA ĐĂNG NHẬP)
     if (!isLoggedIn) {
@@ -39,6 +53,10 @@ const ProtectedRoute = ({ children, requiredPermission = null, requiredAny = [],
     if (!isAuthorized) {
         // Đá về trang báo lỗi "403 Access Denied"
         return <Navigate to="/403" replace />;
+    }
+
+    if (excludeWarehouseOnly && isWarehouseUser && !isAdminUser && !isSalesUser) {
+        return <Navigate to="/admin" replace />;
     }
 
     // OK - ĐỒNG Ý CHO PHÉP ROUTER VẼ TIẾP VÀ CHẠY

@@ -1,1 +1,1 @@
-"""SVD Collaborative Filtering — train.py + recommend.py + asset/."""
+"""Item-based collaborative filtering — train.py + recommend.py + asset/."""

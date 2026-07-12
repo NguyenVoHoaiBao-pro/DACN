@@ -24,4 +24,5 @@ export const RESOLUTION_OPTIONS = [
   { value: "REPLACE", label: "Đổi sản phẩm mới (tạo đơn 0đ → Kho)" },
   { value: "REPAIR_RETURN", label: "Sửa chữa và gửi trả khách" },
   { value: "REJECT", label: "Từ chối bảo hành (lỗi người dùng)" },
+  { value: "REFUND", label: "Hoàn tiền (máy hỏng — đã về kho)" },
 ];

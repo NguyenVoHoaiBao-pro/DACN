@@ -45,6 +45,16 @@ export function persistAuthSession(loginData) {
   return { token, user };
 }
 
+/** ID user đăng nhập (auth LoginProfile.id) — dùng khi gửi userId lên API kho */
+export function getStoredUserId() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return user?.id ?? user?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearAuthSession() {
   localStorage.removeItem("token");
   localStorage.removeItem("refreshToken");

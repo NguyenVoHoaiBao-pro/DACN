@@ -17,6 +17,8 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     Optional<Order> findByOrderCode(String orderCode);
 
+    Optional<Order> findFirstByTrackingCodeIgnoreCase(String trackingCode);
+
     // Danh sách đơn hàng hiển thị (chưa bị ẩn)
     @Query("SELECT o FROM Order o WHERE o.isHidden = false")
     Page<Order> findAllActive(Pageable pageable);
@@ -34,6 +36,11 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     @Query("SELECT o FROM Order o WHERE o.status = :status AND o.isHidden = false")
     Page<Order> findByStatus(@Param("status") Order.OrderStatus status, Pageable pageable);
 
+    @Query("SELECT o FROM Order o WHERE o.status IN :statuses AND o.isHidden = false ORDER BY o.orderDate ASC")
+    Page<Order> findByStatusInAndHiddenFalse(
+            @Param("statuses") List<Order.OrderStatus> statuses,
+            Pageable pageable);
+
     @Query("SELECT o FROM Order o WHERE " +
            "o.orderDate BETWEEN :startDate AND :endDate")
     Page<Order> findByOrderDateBetween(@Param("startDate") LocalDateTime startDate,
@@ -47,6 +54,14 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status")
     Long countByStatus(@Param("status") Order.OrderStatus status);
+
+    @Query("""
+            SELECT COUNT(DISTINCT o.id) FROM Order o
+            JOIN o.orderDetails od
+            WHERE o.isHidden = false
+            AND o.status IN :statuses
+            AND (SELECT COUNT(oi) FROM OrderItem oi WHERE oi.orderDetail.id = od.id) < od.quantity""")
+    Long countOrdersWithIncompleteImei(@Param("statuses") List<Order.OrderStatus> statuses);
 
     @Query("SELECT SUM(o.totalAmount) FROM Order o WHERE " +
            "o.status = 'DELIVERED' AND o.orderDate BETWEEN :startDate AND :endDate")

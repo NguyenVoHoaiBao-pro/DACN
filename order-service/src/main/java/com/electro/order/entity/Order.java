@@ -50,6 +50,13 @@ public class Order {
     @Column(name = "ghn_order_code", length = 50)
     private String ghnOrderCode;
 
+    /** Trạng thái vận chuyển chi tiết từ GHN webhook (delivering, delivered, ...) */
+    @Column(name = "ghn_shipping_status", length = 50)
+    private String ghnShippingStatus;
+
+    @Column(name = "ghn_status_updated_at")
+    private LocalDateTime ghnStatusUpdatedAt;
+
     @Column(name = "to_district_id")
     private Integer toDistrictId;
 
@@ -79,6 +86,10 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status")
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
+
+    /** COD: shipper đã thu tiền và đối soát về shop */
+    @Column(name = "cod_reconciled")
+    private Boolean codReconciled = false;
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
